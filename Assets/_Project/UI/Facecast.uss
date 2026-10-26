@@ -1,0 +1,81 @@
+/* Facecast's in-world overlay: names over heads, the crosshair, the controls hint and the offline banner. Matches the
+   page around the web build (WebGLTemplates/Facecast): deep navy glass, cream text, each player's own colour. */
+
+:root {
+    -unity-font-definition: url("project://database/Assets/_Project/UI/Fonts/FiraSans-SemiBold-SDF.asset");
+    color: rgb(255, 250, 240);
+    font-size: 20px;
+}
+
+.fc-root {
+    position: absolute;
+    left: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+}
+
+.fc-plates {
+    position: absolute;
+    left: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+}
+
+.fc-plate {
+    position: absolute;
+    translate: -50% -100%;
+    transform-origin: 50% 100%;
+    padding: 3px 12px 4px 12px;
+    border-radius: 12px;
+    background-color: rgba(18, 24, 44, 0.72);
+    border-bottom-width: 3px;
+    font-size: 22px;
+    -unity-text-align: middle-center;
+    white-space: nowrap;
+    transition-property: background-color;
+    transition-duration: 0.15s;
+}
+
+.fc-plate--speaking {
+    background-color: rgba(34, 48, 92, 0.92);
+}
+
+.fc-crosshair {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 8px;
+    height: 8px;
+    translate: -50% -50%;
+    border-radius: 4px;
+    background-color: rgba(255, 255, 255, 0.85);
+    border-width: 1.5px;
+    border-color: rgba(18, 24, 44, 0.55);
+}
+
+.fc-hint {
+    position: absolute;
+    left: 50%;
+    bottom: 34px;
+    translate: -50% 0;
+    padding: 9px 20px 10px 20px;
+    border-radius: 20px;
+    background-color: rgba(18, 24, 44, 0.74);
+    font-size: 19px;
+    white-space: nowrap;
+}
+
+.fc-banner {
+    position: absolute;
+    left: 50%;
+    top: 22px;
+    translate: -50% 0;
+    padding: 7px 18px 8px 18px;
+    border-radius: 16px;
+    background-color: rgba(242, 193, 78, 0.92);
+    color: rgb(40, 30, 10);
+    font-size: 18px;
+    white-space: nowrap;
+}
