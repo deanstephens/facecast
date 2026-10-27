@@ -1,9 +1,12 @@
-// Bundles Trystero (serverless WebRTC signalling) into single ES modules inside the web template, so the page
-// needs no CDN and no build step of its own. Run after changing the Trystero version in package.json:
+// Puts the page's libraries inside the web template, so it needs no CDN and no build step of its own. Run after
+// changing a version in package.json:
 //
 //   cd Tools/web && npm install && npm run vendor
 //
-// Nostr is the default signalling network; MQTT is the fallback the page can switch to with ?net=mqtt.
+// - Trystero (serverless WebRTC signalling), bundled into single ES modules: Nostr is the default signalling
+//   network; MQTT is the fallback the page can switch to with ?net=mqtt.
+// - MediaPipe Tasks Vision's face detector, for zooming each camera on its face (faceframe.js): the ES module, the
+//   SIMD WebAssembly build (every current browser has SIMD) and the BlazeFace short-range model.
 
 import {build} from 'esbuild'
 import {fileURLToPath} from 'node:url'
@@ -29,3 +32,28 @@ for (const strategy of ['nostr', 'mqtt']) {
   })
   console.log(`${path.relative(process.cwd(), outfile)}  ${(fs.statSync(outfile).size / 1024).toFixed(0)} KB`)
 }
+
+// MediaPipe: copied as published (the wasm loader finds its .wasm by the path the page gives it).
+const mpDir = path.join(outDir, 'mediapipe')
+const mp = path.join(here, 'node_modules/@mediapipe/tasks-vision')
+const mpVersion = JSON.parse(fs.readFileSync(path.join(mp, 'package.json'), 'utf8')).version
+fs.mkdirSync(mpDir, {recursive: true})
+for (const file of ['vision_bundle.mjs', 'wasm/vision_wasm_internal.js', 'wasm/vision_wasm_internal.wasm']) {
+  const to = path.join(mpDir, path.basename(file))
+  let content = fs.readFileSync(path.join(mp, file))
+  // Drop the source map link: the map isn't copied, and browsers would ask for it.
+  if (file.endsWith('.mjs')) content = Buffer.from(String(content).replace(/\n\/\/# sourceMappingURL=\S+\s*$/, '\n'))
+  fs.writeFileSync(to, content)
+  console.log(`${path.relative(process.cwd(), to)}  ${(fs.statSync(to).size / 1024).toFixed(0)} KB`)
+}
+const model = path.join(mpDir, 'blaze_face_short_range.tflite')
+if (!fs.existsSync(model)) {
+  const url = 'https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite'
+  const res = await fetch(url)
+  if (!res.ok) throw new Error(`couldn't download the face model: ${res.status}`)
+  fs.writeFileSync(model, Buffer.from(await res.arrayBuffer()))
+}
+console.log(`${path.relative(process.cwd(), model)}  ${(fs.statSync(model).size / 1024).toFixed(0)} KB`)
+fs.writeFileSync(path.join(mpDir, 'VERSION.txt'),
+  `MediaPipe Tasks Vision ${mpVersion} (Apache License 2.0, https://github.com/google-ai-edge/mediapipe) and the\n` +
+  `BlazeFace short-range face detection model (Apache License 2.0). Copied by Tools/web/vendor.mjs.\n`)

@@ -51,7 +51,7 @@ namespace Facecast
             _prompt = new Label { pickingMode = PickingMode.Ignore };
             _prompt.AddToClassList("fc-prompt");
             _root.Add(_prompt);
-            _hint = new Label("Click to look around   ·   WASD walk   ·   Shift run   ·   Space jump   ·   M microphone   ·   V camera")
+            _hint = new Label("Click to look around   ·   WASD walk   ·   Shift run   ·   Space jump   ·   M microphone   ·   V camera   ·   Z face zoom")
                 { pickingMode = PickingMode.Ignore };
             _hint.AddToClassList("fc-hint");
             _root.Add(_hint);

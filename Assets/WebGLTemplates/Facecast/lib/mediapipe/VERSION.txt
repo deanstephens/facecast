@@ -1,0 +1,2 @@
+MediaPipe Tasks Vision 0.10.18 (Apache License 2.0, https://github.com/google-ai-edge/mediapipe) and the
+BlazeFace short-range face detection model (Apache License 2.0). Copied by Tools/web/vendor.mjs.

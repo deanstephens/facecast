@@ -23,6 +23,23 @@ mergeInto(LibraryManager.library, {
     if (window.facecast) window.facecast.toggleCam();
   },
 
+  FC_ToggleZoom: function () {
+    if (window.facecast) window.facecast.toggleZoom();
+  },
+
+  // Writes the part of key's picture their face is in (x, y, w, h from the top left, fractions) into the float[4]
+  // at ptr. Returns 0, writing nothing, when the whole picture should show.
+  FC_VideoCrop: function (key, ptr) {
+    var c = window.facecast ? window.facecast.videoCrop(UTF8ToString(key)) : null;
+    if (!c) return 0;
+    var i = ptr >> 2;
+    HEAPF32[i] = c[0];
+    HEAPF32[i + 1] = c[1];
+    HEAPF32[i + 2] = c[2];
+    HEAPF32[i + 3] = c[3];
+    return 1;
+  },
+
   FC_AudioLevel: function (key) {
     return window.facecast ? window.facecast.audioLevel(UTF8ToString(key)) : 0;
   },

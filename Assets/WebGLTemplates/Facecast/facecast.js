@@ -4,10 +4,13 @@
 //
 // Networking is peer to peer: every browser in a room connects to every other one (WebRTC), sending its camera and
 // microphone as media streams and small messages over a data channel: "hello" (name, colour, camera and microphone
-// on/off), "pose" (where its avatar stands and looks, 15 times a second) and "notes" (sticky notes on the
+// on/off), "pose" (where its avatar stands and looks, 15 times a second, with the part of its camera picture its face
+// is in: see faceframe.js) and "notes" (sticky notes on the
 // noticeboards: the game decides what's on them, the page just carries the messages). Browsers find each other
 // through Trystero, which swaps connection offers over public Nostr relays (or MQTT brokers), so the page needs no
 // server of its own and runs from any static host such as GitHub Pages.
+
+import {FaceZoom, cleanCrop} from './faceframe.js'
 
 const APP_ID = 'facecast.unity-webrtc.v1'
 const COLORS = ['#5AA6F2', '#F2705A', '#F2C14E', '#4CC9A0', '#9B7BF2', '#F27BB4', '#F2963C', '#3CB4C8']
@@ -32,10 +35,11 @@ const feeds = $('feeds')
 
 // ------------------------------------------------------------------ state
 
-const me = {name: '', color: COLORS[0], cam: true, mic: true}
+const me = {name: '', color: COLORS[0], cam: true, mic: true, zoom: true}
 const local = new MediaStream()     // the tracks we send: at most one video and one audio
 let localShared = false             // added to the room yet (later tracks then go with addTrack)
-const selfVideo = makeVideo(true)   // your camera, for demo bots that wear it
+const selfVideo = makeVideo(true)   // your camera, for demo bots that wear it and for finding your face
+const zoom = new FaceZoom(selfVideo)
 const peers = new Map()             // id -> {id, name, color, cam, mic, hello, pose, stream, video, analyser, source}
 let room = null
 let actions = null
@@ -64,17 +68,23 @@ window.facecast = {
   },
   sendPose(x, y, z, yaw, pitch, time) {
     lastPose = [x, y, z, yaw, pitch, time]
-    if (actions) actions.pose.send(new Float32Array(lastPose)).catch(() => {})
+    if (actions) actions.pose.send(poseMessage()).catch(() => {})
     for (const peer of peers.values()) setVolume(peer)
   },
   toggleMic() { setMic(!me.mic) },
   toggleCam() { setCam(!me.cam) },
+  toggleZoom() { setZoom(!me.zoom) },
   videoFor(key) {
     if (key === 'self') return me.cam ? selfVideo : null
     const peer = peers.get(key)
     return peer && peer.cam ? peer.video : null
   },
   frameStamp(video) { return video.fcFrames > 0 ? video.fcFrames : video.currentTime },
+  // The part of key's picture their face is in, [x, y, w, h] from the top left, or null for the whole picture.
+  videoCrop(key) {
+    const c = key === 'self' ? ownCrop() : peers.get(key)?.crop
+    return c ? [c.x, c.y, c.w, c.h] : null
+  },
   countUpload(key) { uploads[key] = (uploads[key] || 0) + 1 },
   audioLevel(key) {
     if (key === 'self') return me.mic ? levelOf(selfAnalyser, me) : 0
@@ -102,7 +112,9 @@ window.facecast = {
       video: p.video ? `${p.video.videoWidth}x${p.video.videoHeight}` : '',
       audio: !!(p.stream && p.stream.getAudioTracks().length),
       uploads: uploads[p.id] || 0,
+      crop: p.crop,
     })),
+    faceZoom: () => ({enabled: zoom.enabled, state: zoom.state, faces: zoom.faces, crop: zoom.crop}),
     uploads: () => ({...uploads}),
     notes: () => notesReport,
     notesReceived: () => notesReceived,
@@ -161,6 +173,8 @@ function setupCard() {
     me.color = '#' + params.get('color').replace('#', '').toUpperCase()
   if (params.get('cam') === '0') me.cam = false
   if (params.get('mic') === '0') me.mic = false
+  me.zoom = params.has('zoom') ? params.get('zoom') !== '0' : saved.zoom !== false
+  zoom.setEnabled(me.zoom)
 
   $('name').value = me.name
   $('name').placeholder = NAMES[Math.floor(Math.random() * NAMES.length)]
@@ -182,6 +196,7 @@ function setupCard() {
 
   $('camToggle').onclick = () => setCam(!me.cam)
   $('micToggle').onclick = () => setMic(!me.mic)
+  $('zoomToggle').onclick = () => setZoom(!me.zoom)
   $('previewOn').onclick = () => setCam(true)
   $('join').onclick = join
   for (const id of ['name', 'room']) fieldKeys.set($(id), e => { if (e.key === 'Enter' && !$('join').disabled) join() })
@@ -192,6 +207,10 @@ function setupCard() {
   if (me.cam && navigator.permissions) {
     navigator.permissions.query({name: 'camera'}).then(p => { if (p.state === 'granted' && !joined) setCam(true) }).catch(() => {})
   }
+}
+
+function savePrefs() {
+  try { localStorage.setItem('facecast', JSON.stringify({name: me.name, color: me.color, zoom: me.zoom})) } catch {}
 }
 
 function pickColor(color) {
@@ -271,6 +290,46 @@ async function setMic(on) {
   if (joined) sayHello()
 }
 
+function setZoom(on) {
+  me.zoom = on
+  zoom.setEnabled(on)
+  savePrefs()
+  reflectMedia()
+  if (joined) toast(on ? 'Face zoom on: your face fills your screen' : 'Face zoom off: everyone sees your whole picture')
+}
+
+// Where your face is in your picture, while your camera is on.
+function ownCrop() {
+  return me.cam && local.getVideoTracks().length ? zoom.crop : null
+}
+
+// Follows your face every frame, and shows your previews zoomed the way everyone else sees you.
+function followFace(now) {
+  if (me.cam && local.getVideoTracks().length) zoom.tick(now)
+  const crop = ownCrop()
+  showCrop($('preview'), crop)
+  showCrop($('selfView'), crop)
+  requestAnimationFrame(followFace)
+}
+
+// Fills a mirrored self view with the crop of the picture: the video is stretched over a box that much bigger than
+// the screen and shifted so the crop lands on it (its shape matches the picture's, so nothing is distorted).
+function showCrop(video, c) {
+  const key = c ? `${c.x.toFixed(4)} ${c.y.toFixed(4)} ${c.w.toFixed(4)} ${c.h.toFixed(4)}` : ''
+  if (video.fcCrop === key) return
+  video.fcCrop = key
+  const s = video.style
+  if (!c) {
+    s.objectFit = s.width = s.height = s.left = s.top = ''
+    return
+  }
+  s.objectFit = 'fill'
+  s.width = `${100 / c.w}%`
+  s.height = `${100 / c.h}%`
+  s.left = `${(-(1 - c.x - c.w) / c.w) * 100}%`  // mirrored: the crop's right edge shows on the left
+  s.top = `${(-c.y / c.h) * 100}%`
+}
+
 // Asks for the camera and microphone together (one permission prompt), falling back to one at a time so a
 // missing or refused device doesn't take the other with it.
 async function acquireMedia() {
@@ -318,6 +377,7 @@ function reflectMedia() {
   const hasVideo = local.getVideoTracks().length > 0
   for (const id of ['camToggle', 'hudCam']) $(id).setAttribute('aria-pressed', String(me.cam))
   for (const id of ['micToggle', 'hudMic']) $(id).setAttribute('aria-pressed', String(me.mic))
+  for (const id of ['zoomToggle', 'hudZoom']) $(id).setAttribute('aria-pressed', String(me.zoom))
   $('previewOn').hidden = !(me.cam && !hasVideo)
   $('previewOff').hidden = me.cam
   $('preview').hidden = !(me.cam && hasVideo)
@@ -367,6 +427,12 @@ function setVolume(peer) {
 
 // ------------------------------------------------------------------ the room
 
+// Your pose for the room: six floats, then the crop of your picture your face is in, while your camera is on.
+function poseMessage() {
+  const c = ownCrop()
+  return new Float32Array(c ? [...lastPose, c.x, c.y, c.w, c.h] : lastPose)
+}
+
 function hello() {
   return {name: me.name, color: me.color, cam: me.cam, mic: me.mic}
 }
@@ -392,7 +458,7 @@ async function join() {
   roomId = cleanRoom($('room').value) || randomRoom()
   $('room').value = roomId
   history.replaceState(null, '', `${location.pathname}${location.search}#${roomId}`)
-  try { localStorage.setItem('facecast', JSON.stringify({name: me.name, color: me.color})) } catch {}
+  savePrefs()
 
   ensureAudio()   // inside the click, so the browser lets sound play
   await acquireMedia()
@@ -422,7 +488,7 @@ async function join() {
   room.onPeerJoin = id => {
     peer(id)
     helloAction.send(hello(), {target: id}).catch(() => {})
-    if (lastPose) poseAction.send(new Float32Array(lastPose), {target: id}).catch(() => {})
+    if (lastPose) poseAction.send(poseMessage(), {target: id}).catch(() => {})
     if (local.getTracks().length) room.addStream(local, {target: id})
     updatePeople()
   }
@@ -461,6 +527,7 @@ async function join() {
     const f = new Float32Array(buffer, 0, 6)
     const p = peer(peerId)
     p.pose = Array.from(f.subarray(0, 6))
+    p.crop = buffer.byteLength >= 40 ? cleanCrop(new Float32Array(buffer, 24, 4)) : null
     setVolume(p)
     if (p.hello) toUnity({type: 'pose', id: peerId, p: p.pose})
   }
@@ -570,6 +637,7 @@ function showHud() {
   $('roomLabel').textContent = roomId
   $('hudMic').onclick = () => setMic(!me.mic)
   $('hudCam').onclick = () => setCam(!me.cam)
+  $('hudZoom').onclick = () => setZoom(!me.zoom)
   $('leave').onclick = leave
   $('invite').onclick = copyInvite
   updatePeople()
@@ -636,4 +704,5 @@ canvas.addEventListener('contextmenu', e => e.preventDefault())
 window.addEventListener('pagehide', () => { if (room) room.leave() })
 setupCard()
 setupNoteEditor()
+requestAnimationFrame(followFace)
 loadUnity()

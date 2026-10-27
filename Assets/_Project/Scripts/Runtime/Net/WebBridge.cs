@@ -14,6 +14,8 @@ namespace Facecast
         [DllImport("__Internal")] static extern void FC_SendPose(float x, float y, float z, float yaw, float pitch, float time);
         [DllImport("__Internal")] static extern void FC_ToggleMic();
         [DllImport("__Internal")] static extern void FC_ToggleCam();
+        [DllImport("__Internal")] static extern void FC_ToggleZoom();
+        [DllImport("__Internal")] static extern int FC_VideoCrop(string key, float[] crop);
         [DllImport("__Internal")] static extern float FC_AudioLevel(string key);
         [DllImport("__Internal")] static extern int FC_CreateVideoTexture();
         [DllImport("__Internal")] static extern int FC_UpdateVideoTexture(string key, int texture);
@@ -28,6 +30,12 @@ namespace Facecast
         public static void SendPose(AvatarPose p, float time) => FC_SendPose(p.Position.x, p.Position.y, p.Position.z, p.Yaw, p.Pitch, time);
         public static void ToggleMic() => FC_ToggleMic();
         public static void ToggleCam() => FC_ToggleCam();
+        public static void ToggleZoom() => FC_ToggleZoom();
+        /// <summary>
+        /// The part of <paramref name="key"/>'s picture their face is in, into <paramref name="crop"/> (x, y, w, h:
+        /// fractions of the picture from its top left). False when the whole picture should show.
+        /// </summary>
+        public static bool VideoCrop(string key, float[] crop) => FC_VideoCrop(key, crop) != 0;
         public static float AudioLevel(string key) => FC_AudioLevel(key);
         public static int CreateVideoTexture() => FC_CreateVideoTexture();
         /// <summary>Copies the newest frame of <paramref name="key"/>'s video into the texture. Returns width &lt;&lt; 16 | height, or 0 without video.</summary>
@@ -46,6 +54,8 @@ namespace Facecast
         public static void SendPose(AvatarPose p, float time) { }
         public static void ToggleMic() { }
         public static void ToggleCam() { }
+        public static void ToggleZoom() { }
+        public static bool VideoCrop(string key, float[] crop) => false;
         public static float AudioLevel(string key) => 0f;
         public static int CreateVideoTexture() => 0;
         public static int UpdateVideoTexture(string key, int texture) => 0;

@@ -5,9 +5,10 @@ namespace Facecast
 {
     /// <summary>
     /// You, in first person. Click to capture the mouse and look around (Esc lets go), WASD or the arrow keys to walk,
-    /// Shift to run, Space to jump; M and V switch your microphone and camera (in the web build). Sticky notes are
-    /// <see cref="NoteHand"/>'s. Your own avatar is invisible to you but casts its shadow. Your pose goes to the room
-    /// 15 times a second. Before you join, the camera circles the square slowly behind the page's join card.
+    /// Shift to run, Space to jump; M and V switch your microphone and camera and Z the zoom on your face (in the web
+    /// build). Sticky notes are <see cref="NoteHand"/>'s. Your own avatar is invisible to you but casts its shadow.
+    /// Your pose goes to the room 15 times a second. Before you join, the camera circles the square slowly behind the
+    /// page's join card.
     /// </summary>
     [RequireComponent(typeof(CharacterController))]
     public sealed class LocalPlayer : MonoBehaviour
@@ -36,7 +37,7 @@ namespace Facecast
         public bool Grounded => _cc.isGrounded;
 
         CharacterController _cc;
-        InputAction _move, _look, _run, _jump, _click, _mic, _cam;
+        InputAction _move, _look, _run, _jump, _click, _mic, _cam, _zoom;
         float _yaw, _pitch, _nextSend;
         Vector3 _velocity, _moved;
 
@@ -57,21 +58,22 @@ namespace Facecast
             _click = new InputAction("Capture", InputActionType.Button, "<Mouse>/leftButton");
             _mic = new InputAction("Microphone", InputActionType.Button, "<Keyboard>/m");
             _cam = new InputAction("Camera", InputActionType.Button, "<Keyboard>/v");
+            _zoom = new InputAction("Face zoom", InputActionType.Button, "<Keyboard>/z");
         }
 
         void OnEnable()
         {
-            foreach (var a in new[] { _move, _look, _run, _jump, _click, _mic, _cam }) a.Enable();
+            foreach (var a in new[] { _move, _look, _run, _jump, _click, _mic, _cam, _zoom }) a.Enable();
         }
 
         void OnDisable()
         {
-            foreach (var a in new[] { _move, _look, _run, _jump, _click, _mic, _cam }) a.Disable();
+            foreach (var a in new[] { _move, _look, _run, _jump, _click, _mic, _cam, _zoom }) a.Disable();
         }
 
         void OnDestroy()
         {
-            foreach (var a in new[] { _move, _look, _run, _jump, _click, _mic, _cam }) a.Dispose();
+            foreach (var a in new[] { _move, _look, _run, _jump, _click, _mic, _cam, _zoom }) a.Dispose();
         }
 
         /// <summary>Puts you in the square (the page said you joined), wearing <paramref name="color"/>.</summary>
@@ -122,6 +124,7 @@ namespace Facecast
                 }
                 if (_mic.WasPressedThisFrame()) WebBridge.ToggleMic();
                 if (_cam.WasPressedThisFrame()) WebBridge.ToggleCam();
+                if (_zoom.WasPressedThisFrame()) WebBridge.ToggleZoom();
                 var look = locked ? Vector2.ClampMagnitude(_look.ReadValue<Vector2>(), MaxLookStep) : Vector2.zero;
                 Step(_move.ReadValue<Vector2>(), look, _run.IsPressed(), _jump.WasPressedThisFrame(), dt);
             }

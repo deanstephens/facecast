@@ -1,9 +1,9 @@
 # Facecast
 
 Walk around a sunny town square with friends, in first person. Everyone is a small hovering robot whose face is a
-screen, and **your webcam is your face**: whoever walks up to you sees you on it, and hears you, louder the closer
-they stand. Four noticeboards stand round the square: take a sticky note from one, write on it and stick it anywhere
-on any board for everyone to read.
+screen, and **your webcam is your face**, zoomed in so your face fills it: whoever walks up to you sees you on it, and
+hears you, louder the closer they stand. Four noticeboards stand round the square: take a sticky note from one, write
+on it and stick it anywhere on any board for everyone to read.
 
 It's a static web page: Unity for the world, Blender for every model, and WebRTC between the browsers for video,
 voice and movement. Put it on GitHub Pages (or any static host), send a friend the room's link, and you meet. There
@@ -36,9 +36,16 @@ with the link can join, so pick a room name nobody will guess for a private chat
 | Throw it away | X (or Delete) |
 | Microphone on/off | M, or the microphone button |
 | Camera on/off | V, or the camera button |
+| Face zoom on/off | Z, or the face button |
 | Leave | The door button |
 
-Your own camera shows in the corner, mirrored like a mirror; everyone else sees you the right way round. Names float
+**Face zoom.** Your browser finds your face in your camera picture and zooms in on it, following you smoothly as you
+move, so your face fills your screen however far you sit from the camera. If it loses you for more than a moment it
+eases back out to the whole picture. Turn it off with the face button (on the join card or next to your camera) or
+Z; the page remembers your choice. `?zoom=0` in the address starts with it off.
+
+Your own camera shows in the corner (zoomed the way everyone sees you), mirrored like a mirror; everyone else sees you
+the right way round. Names float
 over everyone's heads and light up, along with their antenna and ear lights and the rim of their screen, while they
 speak. Use headphones: other people's voices coming out of speakers get back into your microphone.
 
@@ -99,13 +106,15 @@ Open `http://localhost:8790/#test` in two windows (better: two different browser
 join both. Both share your one camera.
 
 **End-to-end test.** `cd Tools/web && npm install && npm run e2e` starts the server, opens two Chrome instances with
-fake cameras and microphones (a moving test pattern and a beep) in a fresh room over the real relays, has one go through
-the join card (typing her name, picking a colour, pressing Enter) and the other join from the address, stands them
-face to face, and checks that each sees the other's camera on their face screen and hears them. Then she takes a note
-from a noticeboard, types on it in the page's editor, makes it green and sticks it on the board; he must see it arrive
-and moves it; she must see it move; and a third browser joining afterwards must find it where he put it. Screenshots
-of the card, both views, the note editor and the board go to `Screenshots/web_*.png`. `npm run e2e -- --headed` shows the windows; `npm run e2e -- --url
-https://you.github.io/facecast/` tests the deployed site.
+fake cameras and microphones (a portrait, `Tools/web/fixtures/face.mjpeg`, and a beep) in a fresh room over the real
+relays, has one go through the join card (typing her name, picking a colour, pressing Enter) and the other join from
+the address, stands them face to face, and checks that each sees the other's camera on their face screen and hears
+them. Each browser must find the portrait's face and zoom in on it (it's left of centre, so the crop must move too),
+he must get her crop, and her turning the zoom off and on must reach him. Then she takes a note from a noticeboard,
+types on it in the page's editor, makes it green and sticks it on the board; he must see it arrive and moves it; she
+must see it move; and a third browser joining afterwards must find it where he put it. Screenshots of the card, both
+views, the note editor and the board go to `Screenshots/web_*.png`. `npm run e2e -- --headed` shows the windows; `npm
+run e2e -- --url https://you.github.io/facecast/` tests the deployed site.
 
 ## How it works
 
@@ -114,18 +123,26 @@ The page (`Assets/WebGLTemplates/Facecast/`) and the Unity build split the work:
 - **The page** (`facecast.js`) loads the Unity build behind the join card, owns your camera and microphone, and joins
   the WebRTC room with Trystero. Every browser connects to every other one, sends its camera and microphone as media
   streams, and sends two small messages over a data channel: `hello` (name, colour, camera and microphone on or off)
-  and `pose` (where its avatar stands and looks: six floats, 15 times a second, stamped with the sender's clock). It
-  forwards them to the game (`SendMessage("Room", "OnNetEvent", json)`), along with `notes` (below). Voices play through each peer's `<video>`
-  element (so the browser's echo cancellation applies), with the volume set by distance.
+  and `pose` (where its avatar stands and looks: six floats, 15 times a second, stamped with the sender's clock, then
+  four more for the part of its picture its face is in). It forwards them to the game (`SendMessage("Room",
+  "OnNetEvent", json)`), along with `notes` (below). Voices play through each peer's `<video>` element (so the
+  browser's echo cancellation applies), with the volume set by distance.
 - **The game** (`Scripts/Runtime`) is the world. `Room` turns messages into avatars. `RemoteAvatar` plays each peer's
   poses back 150 ms behind the newest, against the sender's clock (`PoseBuffer`), so movement stays smooth however
   unevenly packets arrive. `LocalPlayer` is you (a character controller and the camera) and reports your pose to the
   page through `WebBridge` / `Plugins/WebGL/Facecast.jslib`.
+- **Face zoom** (`faceframe.js`, after fun-meets' auto-framing). The page runs MediaPipe's BlazeFace short-range face
+  detector (WebAssembly, in `lib/mediapipe`, loaded the first time it's needed) on your own camera about seven times a
+  second, and eases a 4:3 crop towards your face. The picture itself is sent untouched; the crop (four numbers) rides
+  along with each pose. Every face screen showing you crops the picture in its shader, so your video never stalls,
+  even while your tab is in the background and can't draw (cropping a canvas and sending that, as fun-meets does,
+  would freeze it). Your self view and join card preview are cropped the same way with CSS.
 - **Faces.** For each peer the jslib creates a WebGL texture, which Unity wraps with
   `Texture2D.CreateExternalTexture`. Every frame it copies the newest video frame from the peer's `<video>` element
   into that texture on the GPU (`texImage2D` from the element, sRGB, flipped so v runs up), and only when there is a
   new frame. Pictures never pass through C#. The `Facecast/Face` shader crops the picture to fill the 4:3 screen
-  (`VideoCrop.AspectFill`), adds a glass sheen and the speaking rim, and fades to the cartoon face when there's no
+  (`VideoCrop.AspectFill`), or to the part their browser says their face is in, gliding between updates; adds a glass
+  sheen and the speaking rim, and fades to the cartoon face when there's no
   video.
 - **Notes.** The game keeps every note in the room in a `NoteBook`: where it's stuck, what it says, who's carrying it.
   Every change (stuck, picked up, rewritten, thrown away) gets a version number (a Lamport clock, with the changer's
@@ -176,8 +193,9 @@ Assets/_Project/
 Assets/WebGLTemplates/Facecast/
   index.html         the page: join card, HUD, the note you write on (Unity fills in the build file names)
   facecast.js        page logic: loading, join card, media, WebRTC room, voice, notes, the bridge
+  faceframe.js       face zoom: finding your face and the crop that frames it
   facecast.css, icon.svg, config.js, fonts/ (Patrick Hand for the note editor)
-  lib/               Trystero, bundled (generated by Tools/web/vendor.mjs)
+  lib/               Trystero, bundled; MediaPipe's face detector and model (both put there by Tools/web/vendor.mjs)
 Blender/
   MODELS.md          the model catalogue: names, child objects, anchors and pivots Unity relies on
   scripts/           common.py (mesh builder + export), models_avatar.py, models_plaza.py, models_boards.py, build_all.py
@@ -185,7 +203,8 @@ Blender/
 Tools/
   serve_web.py       serves the web build locally, like GitHub Pages
   deploy_pages.sh    publishes the web build to GitHub Pages
-  web/               npm tools: vendor.mjs (bundles Trystero), e2e.mjs (the two-browser test)
+  web/               npm tools: vendor.mjs (bundles Trystero, copies MediaPipe), e2e.mjs (the browser test),
+                     faceframe.test.mjs (the face zoom's arithmetic), fixtures/ (a portrait for the fake cameras)
 ```
 
 ## Building
@@ -207,14 +226,16 @@ After editing the Blender scripts, regenerate the models, then run Build Everyth
 /Applications/Blender.app/Contents/MacOS/Blender -b --factory-startup -P Blender/scripts/build_all.py -- Avatar    # one
 ```
 
-To update Trystero: change the versions in `Tools/web/package.json`, then `cd Tools/web && npm install && npm run vendor`.
+To update Trystero or MediaPipe: change the versions in `Tools/web/package.json`, then
+`cd Tools/web && npm install && npm run vendor`.
 
 ## Tests
 
 ```bash
 unity test . --mode EditMode
 unity test . --mode PlayMode
-cd Tools/web && npm install && npm run e2e        # the web build, two browsers, over the real network
+cd Tools/web && npm install && npm test          # the face zoom's arithmetic (Node)
+cd Tools/web && npm run e2e                       # the web build, three browsers, over the real network
 ```
 
 EditMode tests cover pose playback (clock offsets, late and stale packets, extrapolation), video cropping, the page's

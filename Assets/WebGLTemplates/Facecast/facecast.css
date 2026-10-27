@@ -113,9 +113,12 @@ svg { display: block; }
   border: 4px solid #16181e;
 }
 .screen video {
+  position: absolute;
+  left: 0;
+  top: 0;
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: cover; /* the face zoom (facecast.js showCrop) stretches and shifts it instead */
   transform: scaleX(-1); /* a mirror, like every self view; everyone else sees you the right way round */
   display: block;
 }
@@ -275,6 +278,9 @@ svg { display: block; }
 .round svg { width: 22px; height: 22px; }
 .round:hover { background: rgba(28, 36, 64, 0.9); }
 .round[aria-pressed="false"] { background: rgba(229, 87, 74, 0.92); }
+/* Face zoom off isn't a warning, like a muted microphone is: just dimmer. */
+#zoomToggle[aria-pressed="false"], #hudZoom[aria-pressed="false"] { background: var(--glass); }
+#zoomToggle[aria-pressed="false"] svg, #hudZoom[aria-pressed="false"] svg { opacity: 0.5; }
 .round.leave:hover { background: var(--bad); }
 
 .toasts {

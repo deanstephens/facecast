@@ -4,7 +4,8 @@ namespace Facecast
 {
     /// <summary>
     /// Someone else in the room (a peer, or a demo bot): plays back their poses, shows their camera on the face
-    /// screen and lights up while they speak. Stays hidden until their first pose arrives.
+    /// screen (zoomed on their face, gliding after it as their browser follows it) and lights up while they speak.
+    /// Stays hidden until their first pose arrives.
     /// </summary>
     [RequireComponent(typeof(AvatarRig))]
     public sealed class RemoteAvatar : MonoBehaviour
@@ -29,6 +30,8 @@ namespace Facecast
         public AvatarRig Rig { get; private set; }
 
         Vector3 _velocity;
+        Vector4 _crop;
+        bool _cropped;
 
         public void Init(string id)
         {
@@ -70,8 +73,19 @@ namespace Facecast
             // Quick to light up, slower to fade, so speech doesn't flicker.
             Speaking = Mathf.Lerp(Speaking, level, 1f - Mathf.Exp((level > Speaking ? -18f : -6f) * dt));
 
-            if (CamOn && VideoFeeds.TryGet(VideoKey, out var texture, out var size)) Rig.SetVideo(texture, size);
-            else Rig.ShowCartoon();
+            if (CamOn && VideoFeeds.TryGet(VideoKey, out var texture, out var size))
+            {
+                // The crop arrives with their poses, 15 times a second: glide between updates.
+                var crop = VideoFeeds.Crop(VideoKey, size);
+                _crop = _cropped ? Vector4.Lerp(_crop, crop, 1f - Mathf.Exp(-12f * dt)) : crop;
+                _cropped = true;
+                Rig.SetVideo(texture, _crop);
+            }
+            else
+            {
+                _cropped = false;
+                Rig.ShowCartoon();
+            }
 
             var cam = Camera.main;
             if (cam && Rig.Head)

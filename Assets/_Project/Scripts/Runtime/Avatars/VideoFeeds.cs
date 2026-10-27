@@ -21,6 +21,8 @@ namespace Facecast
             public Texture2D Texture;
             public Vector2Int Size;
             public int Frame = -1;
+            public readonly float[] Crop = new float[4];
+            public bool Cropped;
         }
 
         static readonly Dictionary<string, Feed> Feeds = new();
@@ -46,11 +48,24 @@ namespace Facecast
                 feed.Frame = Time.frameCount;
                 int packed = WebBridge.UpdateVideoTexture(key, feed.Id);
                 feed.Size = packed == 0 ? default : new Vector2Int(packed >> 16, packed & 0xFFFF);
+                feed.Cropped = feed.Size.x > 0 && WebBridge.VideoCrop(key, feed.Crop);
             }
             if (feed.Size.x <= 0 || feed.Size.y <= 0) return false;
             texture = feed.Texture;
             size = feed.Size;
             return true;
+        }
+
+        /// <summary>
+        /// The part of <paramref name="key"/>'s picture to show on their face screen, as a UV scale and offset for
+        /// <see cref="TryGet"/>'s texture: zoomed on their face when their browser has found it, otherwise the whole
+        /// picture cut to the screen's shape.
+        /// </summary>
+        public static Vector4 Crop(string key, Vector2Int size)
+        {
+            if (!string.IsNullOrEmpty(key) && Feeds.TryGetValue(key, out var feed) && feed.Cropped)
+                return VideoCrop.FromRect(feed.Crop[0], feed.Crop[1], feed.Crop[2], feed.Crop[3]);
+            return VideoCrop.AspectFill(size);
         }
 
         /// <summary>Frees a key's texture (a peer left).</summary>
@@ -84,6 +99,20 @@ namespace Facecast
             }
             float t = videoAspect / screenAspect;      // taller picture: crop top and bottom
             return new Vector4(1f, t, 0f, (1f - t) * 0.5f);
+        }
+
+        /// <summary>
+        /// UV scale and offset that show the part of a picture at <paramref name="x"/>, <paramref name="y"/> (its top
+        /// left, as fractions of the picture from the picture's top left), <paramref name="w"/> × <paramref name="h"/>:
+        /// a face the sender's browser found (facecast.js). Pictures are uploaded flipped, so v runs up.
+        /// </summary>
+        public static Vector4 FromRect(float x, float y, float w, float h)
+        {
+            w = Mathf.Clamp(w, 0.05f, 1f);
+            h = Mathf.Clamp(h, 0.05f, 1f);
+            x = Mathf.Clamp(x, 0f, 1f - w);
+            y = Mathf.Clamp(y, 0f, 1f - h);
+            return new Vector4(w, h, x, 1f - y - h);
         }
     }
 }

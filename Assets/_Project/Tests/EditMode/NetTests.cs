@@ -98,6 +98,23 @@ namespace Facecast.Tests
         }
 
         [Test]
+        public void AFaceCropFromThePageTurnsIntoTheScreensUvs()
+        {
+            // The page measures from the picture's top left; the texture's v runs up from the bottom.
+            var st = VideoCrop.FromRect(0.25f, 0.1f, 0.5f, 0.5f);
+            Assert.That(Vector4.Distance(st, new Vector4(0.5f, 0.5f, 0.25f, 0.4f)), Is.LessThan(1e-6f));
+            // The screen's top left corner lands on the crop's top left corner.
+            var topLeft = new Vector2(0f, 1f) * new Vector2(st.x, st.y) + new Vector2(st.z, st.w);
+            Assert.That(Vector2.Distance(topLeft, new Vector2(0.25f, 0.9f)), Is.LessThan(1e-6f));
+            Assert.That(VideoCrop.FromRect(0f, 0f, 1f, 1f), Is.EqualTo(new Vector4(1, 1, 0, 0)), "the whole picture");
+            var wild = VideoCrop.FromRect(0.9f, -0.5f, 0.6f, 0f);
+            Assert.That(wild.x, Is.EqualTo(0.6f).Within(1e-6f), "kept inside the picture");
+            Assert.That(wild.y, Is.EqualTo(0.05f).Within(1e-6f));
+            Assert.That(wild.z + wild.x, Is.LessThanOrEqualTo(1f + 1e-6f));
+            Assert.That(wild.w + wild.y, Is.LessThanOrEqualTo(1f + 1e-6f));
+        }
+
+        [Test]
         public void ThePagesMessagesParse()
         {
             var hello = NetEvent.Parse("{\"type\":\"hello\",\"id\":\"abc\",\"name\":\"Ana\",\"color\":\"#F2705A\",\"cam\":true,\"mic\":false}");

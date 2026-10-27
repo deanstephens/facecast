@@ -1,13 +1,15 @@
 {
   "name": "facecast-web-tools",
   "private": true,
-  "description": "Bundles the browser networking library into the WebGL template and runs the browser end-to-end test.",
+  "description": "Bundles the browser networking and face detection libraries into the WebGL template and runs the browser tests.",
   "type": "module",
   "scripts": {
     "vendor": "node vendor.mjs",
+    "test": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test",
     "e2e": "node e2e.mjs"
   },
   "devDependencies": {
+    "@mediapipe/tasks-vision": "0.10.18",
     "@trystero-p2p/mqtt": "0.26.0",
     "@trystero-p2p/nostr": "0.26.0",
     "esbuild": "0.25.10",

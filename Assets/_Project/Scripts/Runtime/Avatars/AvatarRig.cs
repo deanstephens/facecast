@@ -101,11 +101,14 @@ namespace Facecast
         }
 
         /// <summary>Shows a camera picture on the face screen, cropped to fill it.</summary>
-        public void SetVideo(Texture texture, Vector2Int size)
+        public void SetVideo(Texture texture, Vector2Int size) => SetVideo(texture, VideoCrop.AspectFill(size));
+
+        /// <summary>Shows the part of a camera picture that <paramref name="crop"/> (UV scale xy, offset zw) picks out.</summary>
+        public void SetVideo(Texture texture, Vector4 crop)
         {
             Init();
             _face.SetTexture(MainTexId, texture);
-            _face.SetVector(VideoStId, VideoCrop.AspectFill(size));
+            _face.SetVector(VideoStId, crop);
             _videoTarget = 1f;
         }
 

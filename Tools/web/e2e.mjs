@@ -1,6 +1,8 @@
 // End-to-end test of the web build: two Chrome windows with fake cameras and microphones join the same room over
 // the real signalling network, find each other, stand face to face, and must each see the other's camera on their
-// avatar's face screen and receive their voice. Then one writes a sticky note in the page's editor and sticks it on a
+// avatar's face screen and receive their voice. The fake cameras show a portrait (fixtures/face.mjpeg), so the face
+// zoom must find the face, zoom in on it and send the crop to the other. Then one writes a sticky note in the page's
+// editor and sticks it on a
 // noticeboard, the other sees it and moves it, and a third browser arriving later finds it where it was moved to.
 // Screenshots land in Screenshots/web_*.png.
 //
@@ -8,8 +10,7 @@
 //   npm run e2e -- --headed                                (watch it happen)
 //   npm run e2e -- --url https://you.github.io/facecast/   (test a deployed copy instead of a local build)
 //
-// Chrome's fake camera shows a moving test pattern; the two windows run in separate profiles, so it's a real
-// peer-to-peer connection between two browsers, just on one machine.
+// The windows run in separate profiles, so it's a real peer-to-peer connection between browsers, just on one machine.
 
 import {chromium} from 'playwright-core'
 import {spawn} from 'node:child_process'
@@ -54,7 +55,8 @@ if (!base) {
 
 const browserArgs = [
   '--use-fake-ui-for-media-stream',      // allow camera and microphone without asking
-  '--use-fake-device-for-media-stream',  // a test pattern and a beeping tone instead of real devices
+  '--use-fake-device-for-media-stream',  // a beeping tone instead of a real microphone...
+  `--use-file-for-fake-video-capture=${path.join(here, 'fixtures/face.mjpeg')}`,  // ...and a portrait for a camera
   '--autoplay-policy=no-user-gesture-required',
   '--ignore-gpu-blocklist',
   '--enable-unsafe-swiftshader',
@@ -79,6 +81,13 @@ async function open(name) {
 // The note saying `text` on the first board, as the game in `page` has it.
 const noteOnBoard = (page, text) => page.evaluate(t => (window.facecast.debug.notes()?.boards[0].notes || []).find(n => n.text === t) || null, text)
 const near = (n, x, y) => n && Math.abs(n.x - x) < 0.02 && Math.abs(n.y - y) < 0.02
+const fmt = c => c ? `x ${c.x.toFixed(2)} y ${c.y.toFixed(2)} w ${c.w.toFixed(2)} h ${c.h.toFixed(2)}` : 'none'
+// Ana's face zoom, once it has settled on a face; Ben's copy of her crop.
+const anaZoom = page => page.evaluate(() => window.facecast.debug.faceZoom())
+const crop = async (page, zoomed) => page.evaluate(z => {
+  const c = window.facecast.debug.peers().find(p => p.hello)?.crop
+  return c && (z ? c.w < 0.8 : c.w > 0.97) ? c : null
+}, zoomed)
 
 try {
   const pages = [await open('Ana'), await open('Ben')]
@@ -134,6 +143,30 @@ try {
     log(`${name} hears the other at up to ${level.toFixed(2)}`)
     if (level <= 0.05) failures.push(`${name} heard nothing from the other`)
   }
+
+  // Face zoom: the portrait's face is left of centre, so the crop must zoom in and move left to frame it.
+  for (const {name, page} of pages) {
+    const z = await until(`${name}'s browser to find the face`, async () => {
+      const z = await anaZoom(page)
+      return z.state === 'ready' && z.faces > 0 && z.crop && z.crop.w < 0.8 ? z : z.state === 'failed' ? z : null
+    }, 60)
+    log(`${name}'s face zoom: ${z.state}, ${z.faces} face, crop ${fmt(z.crop)}`)
+    if (z.state !== 'ready') failures.push(`${name}'s face detector didn't load`)
+    const cx = z.crop.x + z.crop.w / 2
+    if (cx < 0.25 || cx > 0.5) failures.push(`${name}'s crop isn't on the face (centre ${cx.toFixed(2)})`)
+  }
+  await sleep(2500)  // settled
+  const sent = (await anaZoom(a.page)).crop
+  const got = await until("Ben to get Ana's crop", () => crop(b.page, true), 10)
+  log(`Ben shows Ana's face at ${fmt(got)}`)
+  if (Math.abs(got.x - sent.x) > 0.03 || Math.abs(got.w - sent.w) > 0.03) failures.push(`Ben has Ana's crop as ${fmt(got)}, she sent ${fmt(sent)}`)
+  // Ana switches the zoom off (her HUD button): Ben gets her whole picture; then back on.
+  await a.page.click('#hudZoom')
+  await until("Ben to see Ana's whole picture", () => crop(b.page, false), 10)
+  await a.page.click('#hudZoom')
+  await until("Ben to see Ana's face zoomed again", () => crop(b.page, true), 15)
+  log('Ana turned her face zoom off and on again; Ben followed')
+  await sleep(2500)
 
   for (const {name, page} of pages) {
     const file = path.join(shots, `web_${name.toLowerCase()}.png`)
