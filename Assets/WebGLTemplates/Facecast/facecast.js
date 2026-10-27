@@ -28,7 +28,7 @@ const NOTE_MAX = 140
 
 const $ = id => document.getElementById(id)
 const params = new URLSearchParams(location.search)
-const settings = {net: 'nostr', relayUrls: null, turn: [], screenSize: 'medium', ...(window.FACECAST_CONFIG || {})}
+const settings = {net: 'nostr', relayUrls: null, turn: [], turnUrl: '', screenSize: 'medium', ...(window.FACECAST_CONFIG || {})}
 if (params.get('net')) settings.net = params.get('net')
 
 const canvas = $('game')
@@ -59,6 +59,7 @@ let asking = false                  // it's a question card
 let noteColor = 0
 let notesReport = null              // what the game says is on the boards (for the tests)
 let notesReceived = 0
+let turn = {servers: [], fetched: false, error: ''}  // the TURN servers this page joined with
 let share = null                    // your shared screen: {stream, video, at: [x, y, z, yaw] once the game has put it up}
 const SHARE_VIDEO = {frameRate: {ideal: 15, max: 30}, width: {max: 1920}, height: {max: 1080}}
 // The sizes a shared screen's projection comes in, by the width of its screen in metres (the game's Projections.Widths).
@@ -153,6 +154,8 @@ window.facecast = {
     }),
     uploads: () => ({...uploads}),
     pose: () => lastPose,
+    turn: () => ({count: turn.servers.length, urls: turn.servers.flatMap(s => [].concat(s.urls)), fetched: turn.fetched,
+      error: turn.error, relayOnly: params.has('relay')}),
     notes: () => notesReport,
     notesReceived: () => notesReceived,
     writing: () => writing,
@@ -628,11 +631,17 @@ async function join() {
   }
   const config = {appId: APP_ID}
   if (settings.relayUrls) config.relayConfig = {urls: settings.relayUrls}
-  if (settings.turn && settings.turn.length) config.turnConfig = settings.turn
+  turn = await turnServers()
+  if (turn.servers.length) config.turnConfig = turn.servers
+  // ?relay sends everything through the TURN servers, the way people on strict networks connect: a test that they work.
+  if (params.has('relay')) config.rtcConfig = {iceTransportPolicy: 'relay'}
   room = trystero.joinRoom(config, roomId, {
     onJoinError: ({error, peerId}) => {
       console.warn('[facecast] connection failed', peerId, error)
-      toast(`Couldn't connect to someone (${error}). Their network may need a TURN server; see config.js.`, true)
+      if (/password/.test(error)) return  // a stray offer from another room's browser, not someone here
+      toast(turn.servers.length
+        ? "Couldn't connect to someone, even through this site's TURN server. It may be full or its credentials out of date (see config.js)."
+        : "Couldn't connect to someone: one of your networks blocks direct connections, and this site has no TURN server to relay through yet (see config.js).", true)
     },
   })
   selfId = trystero.selfId
@@ -722,6 +731,29 @@ async function join() {
   joined = true
   toUnity({type: 'self', id: selfId, name: me.name, color: me.color, room: roomId})
   showHud()
+}
+
+// TURN servers relay video for people whose networks block direct connections: the fixed list in config.js (turn),
+// plus any a provider hands out at turnUrl (fresh credentials each time; Metered's credentials URL, for example). A
+// provider that's down mustn't stop anyone joining, so a failed fetch only costs the relay.
+async function turnServers() {
+  const valid = s => s && typeof s === 'object' && (typeof s.urls === 'string' || Array.isArray(s.urls))
+  const servers = (Array.isArray(settings.turn) ? settings.turn : []).filter(valid)
+  const result = {servers, fetched: false, error: ''}
+  if (!settings.turnUrl) return result
+  try {
+    const res = await fetch(settings.turnUrl, {cache: 'no-store', signal: AbortSignal.timeout(5000)})
+    if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
+    const data = await res.json()
+    // An array of ICE servers (Metered), or {iceServers: [...] or {...}} (Cloudflare, others).
+    const list = Array.isArray(data) ? data : [].concat(data?.iceServers || [])
+    servers.push(...list.filter(valid).filter(s => [].concat(s.urls).some(u => /^turns?:/i.test(u))))
+    result.fetched = true
+  } catch (e) {
+    result.error = String(e?.message || e)
+    console.warn("[facecast] couldn't fetch TURN servers from turnUrl:", result.error)
+  }
+  return result
 }
 
 function attachStream(p, stream) {

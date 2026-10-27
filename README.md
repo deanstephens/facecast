@@ -109,10 +109,21 @@ on `https://` pages and on `localhost`; Pages is https.
 **Settings without rebuilding.** `config.js` next to `index.html` (source: `Assets/WebGLTemplates/Facecast/config.js`)
 holds settings you can edit on the deployed site:
 
-- `turn`: TURN servers. Most home connections reach each other directly, but some networks (offices, schools, some
-  mobile carriers) block it, and then those people can't see each other until there's a TURN server to relay through.
-  Cloudflare, Twilio and metered.ca offer them, or run [coturn](https://github.com/coturn/coturn). When a connection
-  fails the page says so.
+- `turn` and `turnUrl`: TURN servers. Most home connections reach each other directly, but some networks (offices,
+  schools, some mobile carriers) block it, and then those people can't see each other ("Couldn't connect to someone")
+  until there's a TURN server to relay their video through. `turn` is a fixed list of servers; `turnUrl` is a URL the
+  page fetches fresh ones from each time someone joins (an array of ICE servers, or `{iceServers}`). Both can be set,
+  and anything there is public, so use a TURN account meant for it. The page still joins if `turnUrl` is down, just
+  without the relay. Setting one up with [Metered](https://www.metered.ca/) (it has a free plan):
+  1. Sign up, then **TURN Server ▸ Credentials ▸ Create Credential** (allow a couple of minutes before it works).
+  2. Either click the credential's **ICE** button and paste the array it copies as `turn: [...]`, or use its API key as
+     `turnUrl: 'https://<your app>.metered.live/api/v1/turn/credentials?apiKey=<key>'`.
+  3. Check it works: `cd Tools/web && npm run turn-check -- --url https://you.github.io/facecast/` relays a message
+     through each server, and `npm run e2e -- --url https://you.github.io/facecast/ --relay` (or `?relay` in the
+     address) sends everything through TURN, the way people on strict networks connect.
+
+  Cloudflare, Twilio and others hand out credentials only from a server of your own (a small worker that returns them
+  can be the `turnUrl`), or run [coturn](https://github.com/coturn/coturn).
 - `net`: `'nostr'` (default) or `'mqtt'`: which public network browsers use to find each other. `?net=mqtt` in the
   address overrides it.
 - `relayUrls`: your own Nostr relays or MQTT brokers instead of the public ones.
@@ -152,7 +163,8 @@ picture on it; he makes it large with the size buttons, and hers must grow too. 
 must find the note where he put it, the question on the table and his projection with his screen; when he stops
 sharing, it must come down for both of them. Screenshots of the card, both views, the note and question editors, the
 board, the table, his size buttons and his projection go to `Screenshots/web_*.png`. `npm run e2e -- --headed` shows
-the windows; `npm run e2e -- --url https://you.github.io/facecast/` tests the deployed site.
+the windows; `npm run e2e -- --url https://you.github.io/facecast/` tests the deployed site; `--relay` sends every
+connection through the site's TURN servers.
 
 ## How it works
 
@@ -257,7 +269,8 @@ Tools/
   serve_web.py       serves the web build locally, like GitHub Pages
   deploy_pages.sh    publishes the web build to GitHub Pages
   web/               npm tools: vendor.mjs (bundles Trystero, copies MediaPipe), e2e.mjs (the browser test),
-                     faceframe.test.mjs (the face zoom's arithmetic), fixtures/ (a portrait for the fake cameras)
+                     turn-check.mjs (does a site's TURN server relay?), faceframe.test.mjs (the face zoom's
+                     arithmetic), fixtures/ (a portrait for the fake cameras)
 ```
 
 ## Building
@@ -289,6 +302,7 @@ unity test . --mode EditMode
 unity test . --mode PlayMode
 cd Tools/web && npm install && npm test          # the face zoom's arithmetic (Node)
 cd Tools/web && npm run e2e                       # the web build, three browsers, over the real network
+cd Tools/web && npm run turn-check                # does the site's TURN server relay?
 ```
 
 EditMode tests cover pose playback (clock offsets, late and stale packets, extrapolation), video cropping, fitting

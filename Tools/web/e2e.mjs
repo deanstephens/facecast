@@ -12,6 +12,7 @@
 //   cd Tools/web && npm install && npm run e2e            (needs a web build in Builds/WebGL and Google Chrome)
 //   npm run e2e -- --headed                                (watch it happen)
 //   npm run e2e -- --url https://you.github.io/facecast/   (test a deployed copy instead of a local build)
+//   npm run e2e -- --relay                                 (everything through the site's TURN servers, as on strict networks)
 //
 // The windows run in separate profiles, so it's a real peer-to-peer connection between browsers, just on one machine.
 
@@ -25,6 +26,8 @@ const here = path.dirname(fileURLToPath(import.meta.url))
 const root = path.resolve(here, '../..')
 const args = process.argv.slice(2)
 const headed = args.includes('--headed')
+const relay = args.includes('--relay')
+const q = relay ? 'relay&' : ''  // pages join with ?relay: their connections may only go through TURN
 const urlArg = args.includes('--url') ? args[args.indexOf('--url') + 1] : null
 const chrome = process.env.CHROME || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
 const port = 8791
@@ -99,7 +102,7 @@ try {
   const [a, b] = pages
 
   // Ana goes through the join card like a person: types her name, picks coral, presses Join.
-  await a.page.goto(`${base}#${room}`)
+  await a.page.goto(`${base}${relay ? '?relay' : ''}#${room}`)
   await until('the game to load', () => a.page.evaluate(() => !document.getElementById('join').disabled), 120)
   fs.mkdirSync(shots, {recursive: true})
   await a.page.screenshot({path: path.join(shots, 'web_card.png')})
@@ -112,11 +115,14 @@ try {
   await a.page.focus('#room')
   await a.page.keyboard.press('Enter')  // Enter in a field joins
   // Ben skips the card.
-  await b.page.goto(`${base}?autojoin&name=Ben&color=4CC9A0#${room}`)
+  await b.page.goto(`${base}?${q}autojoin&name=Ben&color=4CC9A0#${room}`)
   log(`room ${room}; waiting for both to load and join…`)
   for (const {name, page} of pages)
     await until(`${name} to join`, () => page.evaluate(() => window.facecast?.debug.joined()), 120)
 
+  const turnInfo = await a.page.evaluate(() => window.facecast.debug.turn())
+  log(`TURN: ${turnInfo.count} server(s)${turnInfo.error ? ` (turnUrl failed: ${turnInfo.error})` : ''}${relay ? ', relay only' : ''}`)
+  if (relay && !turnInfo.count) failures.push('--relay, but the site has no TURN servers to relay through')
   log('joined; waiting for them to find each other and exchange video…')
   for (const {name, page} of pages) {
     const peer = await until(`${name} to see the other's camera on their face`, () => page.evaluate(() => {
@@ -308,7 +314,7 @@ try {
 
   // Someone arriving later gets the boards from the people already here.
   const c = await open('Cy')
-  await c.page.goto(`${base}?autojoin&name=Cy&cam=0&mic=0#${room}`)
+  await c.page.goto(`${base}?${q}autojoin&name=Cy&cam=0&mic=0#${room}`)
   await until('Cy to join', () => c.page.evaluate(() => window.facecast?.debug.joined()), 120)
   await until('Cy to get the note, where Ben moved it', async () => near(await noteOnBoard(c.page, 'Hello from Ana'), 0.7, 0.4), 60)
   await until('Cy to find the question on the table', () => questionIn(c.page, 'table', "What's for lunch?"), 10)
