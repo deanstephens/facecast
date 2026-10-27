@@ -251,13 +251,12 @@ svg { display: block; }
   position: absolute;
   right: 16px;
   bottom: 16px;
-  width: 210px;
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: flex-end;
   gap: 10px;
 }
-.helmet.small { width: 100%; margin: 0; padding: 9px; border-radius: 22px; }
+.helmet.small { width: 210px; margin: 0; padding: 9px; border-radius: 22px; }
 .helmet.small::before, .helmet.small::after { width: 8px; left: -6px; }
 .helmet.small::after { left: auto; right: -6px; }
 .helmet.small .screen { border-radius: 10px; border-width: 3px; }
@@ -278,6 +277,9 @@ svg { display: block; }
 .round svg { width: 22px; height: 22px; }
 .round:hover { background: rgba(28, 36, 64, 0.9); }
 .round[aria-pressed="false"] { background: rgba(229, 87, 74, 0.92); }
+/* Sharing your screen is on when pressed, and off isn't a warning. */
+#hudShare[aria-pressed="false"] { background: var(--glass); }
+#hudShare[aria-pressed="true"] { background: color-mix(in srgb, var(--me) 80%, var(--ink)); }
 /* Face zoom off isn't a warning, like a muted microphone is: just dimmer. */
 #zoomToggle[aria-pressed="false"], #hudZoom[aria-pressed="false"] { background: var(--glass); }
 #zoomToggle[aria-pressed="false"] svg, #hudZoom[aria-pressed="false"] svg { opacity: 0.5; }
@@ -412,7 +414,8 @@ svg { display: block; }
 @media (max-width: 640px) {
   .card { left: 50%; transform: translate(-50%, -50%); padding: 18px; }
   .helmet { width: 70%; }
-  .selfbox { width: 150px; }
+  .helmet.small { width: 150px; }
+  .controls .round { width: 40px; height: 40px; }
   .roombar { font-size: 13px; }
   .chip span { display: none; }
 }

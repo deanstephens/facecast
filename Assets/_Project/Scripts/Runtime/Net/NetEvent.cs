@@ -13,6 +13,8 @@ namespace Facecast
     /// <item><c>leave</c>: peer <see cref="id"/> left.</item>
     /// <item><c>notes</c>: peer <see cref="id"/> sent <see cref="notes"/> (changes, or every note when you arrive).</item>
     /// <item><c>write</c>: the page's note editor closed: <see cref="ok"/> with <see cref="text"/> in colour <see cref="tint"/>, or cancelled.</item>
+    /// <item><c>sharing</c>: you started sharing your screen (<see cref="on"/>), or stopped.</item>
+    /// <item><c>share</c>: peer <see cref="id"/> put up a projection of their screen at <see cref="p"/> (x, y, z, yaw), or took it down (<see cref="on"/> false).</item>
     /// </list>
     /// </summary>
     [Serializable]
@@ -30,6 +32,7 @@ namespace Facecast
         public string text;
         public int tint;
         public bool ok;
+        public bool on;
 
         public static NetEvent Parse(string json)
         {

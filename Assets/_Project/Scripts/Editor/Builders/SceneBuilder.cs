@@ -13,7 +13,7 @@ namespace Facecast.EditorTools
     /// Builds Plaza.unity, the only scene: the town square (fountain, ring of benches, lamps flanking the four paths,
     /// four noticeboards between them with planters either side, the question box and its table where one bench would
     /// be, a hedge ring with trees and hills beyond, an invisible wall out on the lawn), a golden-hour sun and sky, and
-    /// the systems: App, Room, the noticeboards, the player and camera, and the overlay.
+    /// the systems: App, Room, the noticeboards, shared screens' projections, the player and camera, and the overlay.
     /// </summary>
     public static class SceneBuilder
     {
@@ -105,6 +105,7 @@ namespace Facecast.EditorTools
             notes.CardPrefab = Prefab("QuestionCard");
             notes.NoteFont = AssetDatabase.LoadAssetAtPath<UnityEngine.TextCore.Text.FontAsset>(Paths.NoteFontPath);
             notes.InkMaterial = FacecastAssets.Mat("M_Ink");
+            new GameObject("Projections").AddComponent<Projections>().Prefab = Prefab("ProjectionScreen");
 
             // You: a character controller the size of an avatar, and the camera (which circles the square until you join).
             var playerGo = new GameObject("Player");

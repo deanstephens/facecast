@@ -5,7 +5,8 @@
 // Networking is peer to peer: every browser in a room connects to every other one (WebRTC), sending its camera and
 // microphone as media streams and small messages over a data channel: "hello" (name, colour, camera and microphone
 // on/off), "pose" (where its avatar stands and looks, 15 times a second, with the part of its camera picture its face
-// is in: see faceframe.js) and "notes" (sticky notes on the
+// is in: see faceframe.js), "share" (where its shared screen's projection stands; the screen itself is a second
+// media stream, marked {screen: true}) and "notes" (sticky notes on the
 // noticeboards: the game decides what's on them, the page just carries the messages). Browsers find each other
 // through Trystero, which swaps connection offers over public Nostr relays (or MQTT brokers), so the page needs no
 // server of its own and runs from any static host such as GitHub Pages.
@@ -58,6 +59,8 @@ let asking = false                  // it's a question card
 let noteColor = 0
 let notesReport = null              // what the game says is on the boards (for the tests)
 let notesReceived = 0
+let share = null                    // your shared screen: {stream, video, at: [x, y, z, yaw] once the game has put it up}
+const SHARE_VIDEO = {frameRate: {ideal: 15, max: 30}, width: {max: 1920}, height: {max: 1080}}
 const fieldKeys = new Map()         // text field -> its keydown handler (see the key filter at the bottom)
 
 // ------------------------------------------------------------------ the game's calls (Facecast.jslib)
@@ -75,7 +78,21 @@ window.facecast = {
   toggleMic() { setMic(!me.mic) },
   toggleCam() { setCam(!me.cam) },
   toggleZoom() { setZoom(!me.zoom) },
+  toggleShare() { if (share) stopShare(); else startShare() },
+  // The game put up your projection here (x, y, z, yaw): now everyone gets it, and your screen.
+  shareAt(x, y, z, yaw) {
+    if (!share) return
+    share.at = [x, y, z, yaw]
+    if (!actions) return
+    actions.share.send(shareMessage()).catch(() => {})
+    room.addStream(share.stream, {metadata: {screen: true}})
+  },
   videoFor(key) {
+    if (key === 'screen:self') return share ? share.video : null
+    if (key.startsWith('screen:')) {
+      const p = peers.get(key.slice(7))
+      return p && p.share && p.share.on ? p.screenVideo : null
+    }
     if (key === 'self') return me.cam ? selfVideo : null
     const peer = peers.get(key)
     return peer && peer.cam ? peer.video : null
@@ -116,6 +133,15 @@ window.facecast = {
       crop: p.crop,
     })),
     faceZoom: () => ({enabled: zoom.enabled, state: zoom.state, faces: zoom.faces, crop: zoom.crop}),
+    // Your share, and everyone's: where their projection is, the picture's size and how many frames reached it.
+    shares: () => ({
+      mine: share ? {at: share.at, video: `${share.video.videoWidth}x${share.video.videoHeight}`, uploads: uploads['screen:self'] || 0} : null,
+      peers: [...peers.values()].filter(p => p.share).map(p => ({
+        id: p.id, on: p.share.on, at: p.share.at,
+        video: p.screenVideo ? `${p.screenVideo.videoWidth}x${p.screenVideo.videoHeight}` : '',
+        uploads: uploads[`screen:${p.id}`] || 0,
+      })),
+    }),
     uploads: () => ({...uploads}),
     notes: () => notesReport,
     notesReceived: () => notesReceived,
@@ -420,11 +446,87 @@ function levelOf(analyser, who) {
   return who.level
 }
 
-// Voices fade with distance, so people nearby are easy to hear and a crowd across the square isn't.
+// Voices fade with distance, so people nearby are easy to hear and a crowd across the square isn't. A shared screen's
+// sound (if they shared a tab's sound) comes from its projection.
 function setVolume(peer) {
-  if (!peer.video || !peer.pose || !lastPose) return
-  const d = Math.hypot(peer.pose[0] - lastPose[0], peer.pose[1] - lastPose[1], peer.pose[2] - lastPose[2])
-  peer.video.volume = Math.max(0.06, Math.min(1, 2.2 / Math.max(d, 0.1)))
+  if (!lastPose) return
+  if (peer.video && peer.pose) peer.video.volume = loudness(peer.pose, 2.2)
+  if (peer.screenVideo && peer.share && peer.share.on) peer.screenVideo.volume = loudness(peer.share.at, 3)
+}
+
+function loudness(at, near) {
+  const d = Math.hypot(at[0] - lastPose[0], at[1] - lastPose[1], at[2] - lastPose[2])
+  return Math.max(0.06, Math.min(1, near / Math.max(d, 0.1)))
+}
+
+// ------------------------------------------------------------------ sharing your screen
+
+async function startShare() {
+  if (!joined || share) return
+  if (!navigator.mediaDevices?.getDisplayMedia) return toast("This browser can't share its screen.", true)
+  let stream
+  for (const audio of [true, false]) {  // a tab's sound if they choose to share it; some browsers refuse to ask
+    try {
+      stream = await navigator.mediaDevices.getDisplayMedia({video: SHARE_VIDEO, audio})
+      break
+    } catch (e) {
+      if (!e || e.name === 'NotAllowedError' || e.name === 'AbortError') return  // they changed their mind
+      if (!audio) return toast(`Couldn't share your screen: ${reason(e)}`, true)
+    }
+  }
+  const track = stream.getVideoTracks()[0]
+  if (!track) return
+  track.contentHint = 'detail'                       // sharp text over smooth motion
+  track.addEventListener('ended', stopShare)          // the browser's own "Stop sharing"
+  const video = makeVideo(true)
+  video.srcObject = stream
+  play(video)
+  share = {stream, video, at: null}
+  reflectShare()
+  toUnity({type: 'sharing', on: true})                // the game puts it up and calls shareAt
+  toast('Sharing your screen: it shows on a screen in front of you, where you stood. P or the button stops.')
+}
+
+function stopShare() {
+  if (!share) return
+  const ended = share
+  share = null
+  for (const t of ended.stream.getTracks()) t.stop()
+  if (room && ended.at) {
+    room.removeStream(ended.stream)
+    if (actions) actions.share.send({on: false}).catch(() => {})
+  }
+  ended.video.srcObject = null
+  ended.video.remove()
+  toUnity({type: 'sharing', on: false})
+  reflectShare()
+}
+
+function shareMessage() {
+  return share && share.at ? {on: true, at: share.at} : {on: false}
+}
+
+function reflectShare() {
+  $('hudShare').setAttribute('aria-pressed', String(!!share))
+  $('hudShare').title = share ? 'Stop sharing your screen (P)' : 'Share your screen (P)'
+}
+
+// A peer's shared screen: its picture (and sound, if they shared a tab's sound) arrives as a second stream.
+function attachScreen(p, stream) {
+  p.screenStream = stream
+  if (!p.screenVideo) p.screenVideo = makeVideo(false)
+  if (p.screenVideo.srcObject !== stream) p.screenVideo.srcObject = stream
+  play(p.screenVideo)
+  setVolume(p)
+}
+
+function dropScreen(p) {
+  p.screenStream = null
+  if (p.screenVideo) {
+    p.screenVideo.srcObject = null
+    p.screenVideo.remove()
+    p.screenVideo = null
+  }
 }
 
 // ------------------------------------------------------------------ the room
@@ -485,13 +587,18 @@ async function join() {
   const helloAction = room.makeAction('hello')
   const poseAction = room.makeAction('pose')
   const notesAction = room.makeAction('notes')
-  actions = {hello: helloAction, pose: poseAction, notes: notesAction}
+  const shareAction = room.makeAction('share')
+  actions = {hello: helloAction, pose: poseAction, notes: notesAction, share: shareAction}
 
   room.onPeerJoin = id => {
     peer(id)
     helloAction.send(hello(), {target: id}).catch(() => {})
     if (lastPose) poseAction.send(poseMessage(), {target: id}).catch(() => {})
     if (local.getTracks().length) room.addStream(local, {target: id})
+    if (share && share.at) {
+      shareAction.send(shareMessage(), {target: id}).catch(() => {})
+      room.addStream(share.stream, {target: id, metadata: {screen: true}})
+    }
     updatePeople()
   }
   room.onPeerLeave = id => {
@@ -500,12 +607,14 @@ async function join() {
     peers.delete(id)
     if (p.video) { p.video.srcObject = null; p.video.remove() }
     if (p.analyser) { p.analyser.fcSource.disconnect(); p.analyser.disconnect() }
+    dropScreen(p)
     toUnity({type: 'leave', id})
     if (p.hello) toast(`${p.name} left`)
     updatePeople()
   }
-  room.onPeerStream = (stream, id) => attachStream(peer(id), stream)
-  room.onPeerTrack = (track, stream, id) => attachStream(peer(id), stream)
+  // A peer's camera and microphone, or (marked {screen: true}) their shared screen.
+  room.onPeerStream = (stream, id, meta) => meta?.screen ? attachScreen(peer(id), stream) : attachStream(peer(id), stream)
+  room.onPeerTrack = (track, stream, id, meta) => meta?.screen ? attachScreen(peer(id), stream) : attachStream(peer(id), stream)
 
   helloAction.onMessage = (data, {peerId}) => {
     const p = peer(peerId)
@@ -532,6 +641,18 @@ async function join() {
     p.crop = buffer.byteLength >= 40 ? cleanCrop(new Float32Array(buffer, 24, 4)) : null
     setVolume(p)
     if (p.hello) toUnity({type: 'pose', id: peerId, p: p.pose})
+  }
+  shareAction.onMessage = (data, {peerId}) => {
+    const p = peer(peerId)
+    const at = Array.isArray(data?.at) && data.at.length === 4 && data.at.every(Number.isFinite) ? data.at.map(Number) : null
+    const on = data?.on === true && !!at
+    p.share = {on, at}
+    if (!on) dropScreen(p)
+    else {
+      setVolume(p)
+      if (p.hello) toast(`${p.name} is sharing their screen`)
+    }
+    toUnity({type: 'share', id: peerId, on, p: at || [0, 0, 0, 0]})
   }
   notesAction.onMessage = (data, {peerId}) => {
     const notes = Array.isArray(data?.notes) ? data.notes.slice(0, 1000).map(cleanNote).filter(Boolean) : []
@@ -650,6 +771,9 @@ function showHud() {
   $('hudMic').onclick = () => setMic(!me.mic)
   $('hudCam').onclick = () => setCam(!me.cam)
   $('hudZoom').onclick = () => setZoom(!me.zoom)
+  $('hudShare').onclick = () => { if (share) stopShare(); else startShare() }
+  $('hudShare').hidden = !navigator.mediaDevices?.getDisplayMedia
+  reflectShare()
   $('leave').onclick = leave
   $('invite').onclick = copyInvite
   updatePeople()
@@ -684,6 +808,7 @@ async function copyInvite() {
 function leave() {
   if (room) room.leave()
   for (const t of local.getTracks()) t.stop()
+  if (share) for (const t of share.stream.getTracks()) t.stop()
   location.reload()
 }
 

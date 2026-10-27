@@ -4,7 +4,8 @@ Walk around a sunny town square with friends, in first person. Everyone is a sma
 screen, and **your webcam is your face**, zoomed in so your face fills it: whoever walks up to you sees you on it, and
 hears you, louder the closer they stand. Four noticeboards stand round the square for a retrospective (*Continue*,
 *Stop*, *Invent*, *Act*): take a sticky note from one, write on it and stick it anywhere on any board. Beside them, a
-question box takes written questions, to be pulled out one at a time, read out and laid on the table next to it.
+question box takes written questions, to be pulled out one at a time, read out and laid on the table next to it. Share
+your screen and it goes up on a projection screen in front of you for everyone to see.
 
 It's a static web page: Unity for the world, Blender for every model, and WebRTC between the browsers for video,
 voice and movement. Put it on GitHub Pages (or any static host), send a friend the room's link, and you meet. There
@@ -42,6 +43,7 @@ with the link can join, so pick a room name nobody will guess for a private chat
 | Microphone on/off | M, or the microphone button |
 | Camera on/off | V, or the camera button |
 | Face zoom on/off | Z, or the face button |
+| Share your screen (or stop) | P, or the screen button |
 | Leave | The door button |
 
 **Face zoom.** Your browser finds your face in your camera picture and zooms in on it, following you smoothly as you
@@ -73,6 +75,16 @@ The boards, the box and the table belong to the room: everyone in it sees the sa
 arriving gets them from the people already there. Your browser also keeps each room's notes, so a room you come back
 to still has them even if you're first in (and brings them to the others). An empty room has a single note and a
 single card explaining how they work.
+
+**Sharing your screen.** Press the screen button (or P) and pick a screen, window or tab to share. A projection screen
+unrolls on the ground a couple of metres in front of where you're standing, facing you, in your colour with your name
+on its case, and everyone in the room sees your screen on it. It stays where it went up, however you move, until you
+stop sharing (the button or P again, or your browser's own "Stop sharing"), when it rolls back up. If something's in
+the way (the fountain, a bench, a hedge), it goes up closer. Your whole screen shows, with dark bars if its shape isn't
+16:9. If you share a tab's sound, it plays from the projection, louder the closer people stand. Several people can
+share at once, each on their own projection, and someone arriving later sees the ones already up. Phones can't share
+their screens, so the button only shows where the browser can. Offline (the Editor, desktop builds) there's no screen
+to share: P puts up a demo projection showing the square from above.
 
 **Demo bots.** `?bots=3` in the address (before the `#room`) adds up to eight strollers who chat with each other and
 turn to face you. Only you see them, and they wear your own camera, which makes a quick check that your picture comes
@@ -127,10 +139,13 @@ them. Each browser must find the portrait's face and zoom in on it (it's left of
 he must get her crop, and her turning the zoom off and on must reach him. Then she takes a note from a noticeboard,
 types on it in the page's editor, makes it green and sticks it on the board; he must see it arrive and moves it; she
 must see it move. She writes a question on a card (the page's editor, as a card) and posts it in the question box; he
-must find it in his box, pulls it out and lays it on the table; she must see it there. A third browser joining
-afterwards must find the note where he put it and the question on the table. Screenshots of the card, both views, the
-note and question editors, the board and the table go to `Screenshots/web_*.png`. `npm run e2e -- --headed` shows the
-windows; `npm run e2e -- --url https://you.github.io/facecast/` tests the deployed site.
+must find it in his box, pulls it out and lays it on the table; she must see it there. He shares his screen (Chrome's
+fake screen) with the screen button: his projection must go up in front of him, and she must get its place and his
+screen's picture on it. A third browser joining afterwards must find the note where he put it, the question on the
+table and his projection with his screen; when he stops sharing, it must come down for both of them. Screenshots of
+the card, both views, the note and question editors, the board, the table and his projection go to
+`Screenshots/web_*.png`. `npm run e2e -- --headed` shows the windows; `npm run e2e -- --url
+https://you.github.io/facecast/` tests the deployed site.
 
 ## How it works
 
@@ -140,9 +155,10 @@ The page (`Assets/WebGLTemplates/Facecast/`) and the Unity build split the work:
   the WebRTC room with Trystero. Every browser connects to every other one, sends its camera and microphone as media
   streams, and sends two small messages over a data channel: `hello` (name, colour, camera and microphone on or off)
   and `pose` (where its avatar stands and looks: six floats, 15 times a second, stamped with the sender's clock, then
-  four more for the part of its picture its face is in). It forwards them to the game (`SendMessage("Room",
-  "OnNetEvent", json)`), along with `notes` (below). Voices play through each peer's `<video>` element (so the
-  browser's echo cancellation applies), with the volume set by distance.
+  four more for the part of its picture its face is in). When someone shares their screen, it goes as a second stream
+  marked `{screen: true}`, and a `share` message says where its projection stands (sent again to anyone arriving). It
+  forwards them to the game (`SendMessage("Room", "OnNetEvent", json)`), along with `notes` (below). Voices play
+  through each peer's `<video>` element (so the browser's echo cancellation applies), with the volume set by distance.
 - **The game** (`Scripts/Runtime`) is the world. `Room` turns messages into avatars. `RemoteAvatar` plays each peer's
   poses back 150 ms behind the newest, against the sender's clock (`PoseBuffer`), so movement stays smooth however
   unevenly packets arrive. `LocalPlayer` is you (a character controller and the camera) and reports your pose to the
@@ -172,6 +188,11 @@ The page (`Assets/WebGLTemplates/Facecast/`) and the Unity build split the work:
   words out in Patrick Hand (wrapped, at the biggest size that fits) and builds glyph quads from the font's
   signed-distance-field atlas, which the `Facecast/Ink` shader draws crisply at any distance and lights like the
   paper. Each browser saves the room's notes (`PlayerPrefs`, which is IndexedDB in a browser).
+- **Shared screens.** Sharing starts in the page (`getDisplayMedia`, its track hinted for sharp text). The page tells
+  the game, which picks the spot (`Projections.PlaceInFront`: 2.8 m ahead, or 2.4, 2.0 or 1.6 m if the scenery is in
+  the way) and puts up a `Projection` there; the page then sends that spot and the screen to everyone. Every browser
+  shows the picture on the projection the way faces show cameras (`VideoFeeds`, key `screen:<peer>`), fitted whole by
+  the `Facecast/Screen` shader (`VideoCrop.AspectFit`).
 - **Keyboard.** The game listens to the keyboard on the whole page, so the page keeps key events aimed at its text
   fields away from the game (a capture-phase listener installed before the game loads), and calls those fields' own key
   handlers (Enter to join, Esc and Ctrl+Enter on a note) itself.
@@ -196,7 +217,10 @@ Assets/_Project/
                      VideoFeeds (external video textures) + VideoCrop
     Boards/          Noticeboards (the room's notes and questions: syncing, saving, what's in others' hands),
                      NoteSurface (laying notes out on a board's cork or the table), Noticeboard, QuestionBox,
-                     QuestionTable, Notes (NoteData, NoteBook), NoteInk (handwriting), NoteView, SampleNotes
+                     QuestionTable, Notes (NoteData, NoteBook), NoteInk (handwriting),
+                     Screen (shared screens), NoteView, SampleNotes
+    Sharing/         Projections (shared screens: where they go up, peers' and yours, the offline demo), Projection
+                     (one projection screen: unrolling, the picture, the name on its case)
     Player/          LocalPlayer (first-person movement and look, pose reporting, the pre-join orbit), NoteHand (taking,
                      writing, sticking, moving and throwing away notes; posting, pulling out and laying down questions)
     UI/              Overlay (UI Toolkit: names over heads, crosshair and what a click would do, hints, the offline note
@@ -216,7 +240,7 @@ Assets/WebGLTemplates/Facecast/
 Blender/
   MODELS.md          the model catalogue: names, child objects, anchors and pivots Unity relies on
   scripts/           common.py (mesh builder + export), models_avatar.py, models_plaza.py, models_boards.py,
-                     models_questions.py, build_all.py
+                     models_questions.py, models_projection.py, build_all.py
   source/, previews/ .blend files and preview renders
 Tools/
   serve_web.py       serves the web build locally, like GitHub Pages
@@ -256,23 +280,27 @@ cd Tools/web && npm install && npm test          # the face zoom's arithmetic (N
 cd Tools/web && npm run e2e                       # the web build, three browsers, over the real network
 ```
 
-EditMode tests cover pose playback (clock offsets, late and stale packets, extrapolation), video cropping, the page's
-messages and launch options, and notes: versions agreeing whatever order they arrive in, ties, thrown-away notes
-staying gone, cleaning notes from outside, fitting words on a note, stacking overlapping notes, the wire format, where
-question cards may go. PlayMode tests load the scene offline: you and the demo bots, a peer arriving, moving and
-leaving through the same messages the page sends, names over heads, walking into the fountain and the outer wall,
-walking with a simulated keyboard; and the noticeboards: four boards facing the fountain with their titles written on,
-taking a note from the notepad you're looking at, writing on it, sticking it where you look, picking it up and
-throwing it away, the page's editor answering, a peer's notes arriving and moving, a peer carrying a note and leaving
-with it, two people grabbing the same note, a full board, and a newcomer being sent every note; and the question
-corner: the boards' titles, pointing at the tray, the box and the table, writing a question and posting it (and a
-sticky note refusing to go in), questions coming out oldest first and one at a time and lying face up on the table
-turned to you, a peer's questions arriving and coming back when they leave holding one, and a full table.
+EditMode tests cover pose playback (clock offsets, late and stale packets, extrapolation), video cropping and fitting
+shared screens, the page's messages and launch options, and notes: versions agreeing whatever order they arrive in,
+ties, thrown-away notes staying gone, cleaning notes from outside, fitting words on a note, stacking overlapping
+notes, the wire format, where question cards may go. PlayMode tests load the scene offline: you and the demo bots, a
+peer arriving, moving and leaving through the same messages the page sends, names over heads, walking into the
+fountain and the outer wall, walking with a simulated keyboard; and the noticeboards: four boards facing the fountain
+with their titles written on, taking a note from the notepad you're looking at, writing on it, sticking it where you
+look, picking it up and throwing it away, the page's editor answering, a peer's notes arriving and moving, a peer
+carrying a note and leaving with it, two people grabbing the same note, a full board, and a newcomer being sent every
+note; and the question corner: the boards' titles, pointing at the tray, the box and the table, writing a question and
+posting it (and a sticky note refusing to go in), questions coming out oldest first and one at a time and lying face
+up on the table turned to you, a peer's questions arriving and coming back when they leave holding one, and a full
+table; and shared screens: yours going up in front of you facing you and staying put as you walk off, coming closer
+when the fountain is in the way, a peer's going up where they said with their name on it and coming down when they
+stop or leave, and offline P putting up the demo with a picture fitted whole.
 
 **Screenshot tour.** A desktop build run with `-autocapture <dir>` photographs the square from above, then poses three
 demo bots in front of you and saves your first-person view, a close-up of a face screen and a wider shot with names
 (one carrying a note); then it writes a note at a noticeboard, holds it, holds it up to the board and sticks it; then
-it starts writing a question, pulls one out of the question box, reads it and lays it on the table; and quits:
+it starts writing a question, pulls one out of the question box, reads it and lays it on the table; then it puts up
+the offline demo of a shared screen and photographs it from where you stand and from the side; and quits:
 
 ```bash
 Builds/StandaloneOSX/Facecast.app/Contents/MacOS/Facecast -autocapture "$PWD/Screenshots" -screen-width 1600 -screen-height 900 -screen-fullscreen 0

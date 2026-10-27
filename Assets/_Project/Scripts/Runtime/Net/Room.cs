@@ -57,6 +57,13 @@ namespace Facecast
                 case "leave" when e.id != null:
                     Remove(e.id);
                     Noticeboards.Instance?.PeerLeft(e.id);
+                    Projections.Instance?.PeerLeft(e.id);
+                    break;
+                case "sharing":
+                    Projections.Instance?.OnSharing(e.on);
+                    break;
+                case "share":
+                    Projections.Instance?.OnShare(e.id, e.on, e.p);
                     break;
                 case "notes":
                     Noticeboards.Instance?.Receive(e.notes, e.id);

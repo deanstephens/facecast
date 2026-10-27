@@ -19,7 +19,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import common  # noqa: E402
 
-MODULES = ["models_avatar", "models_plaza", "models_boards", "models_questions"]
+MODULES = ["models_avatar", "models_plaza", "models_boards", "models_questions", "models_projection"]
 
 
 def registry():

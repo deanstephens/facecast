@@ -16,8 +16,8 @@ Conventions (see ../MODELS.md):
         A = 1      "signal" glow that Unity switches per renderer (an avatar's speaking lights)
   * Faces are built from the fixed palette below (names only matter inside the Blender scripts). A model
     module may add its own colours with PALETTE.update({...}) at import time; prefix them to avoid clashes.
-  * The one exception to "no UVs": an avatar's Face screen gets planar 0..1 UVs (set_planar_uv) because
-    Unity draws the player's webcam on it.
+  * The exceptions to "no UVs": an avatar's Face and a projection's Screen get planar 0..1 UVs (set_planar_uv)
+    because Unity draws a webcam picture or a shared screen on them.
 
 All geometry is built in *world* coordinates (model root at the origin) with bmesh and only converted to
 pivot-relative coordinates when the object is created, so pivots are exact by construction.
@@ -759,8 +759,9 @@ def write_vertex_colors(me, mat_names):
 
 def set_planar_uv(ob, lo, hi):
     """Replace a front-facing (-Y) mesh's UVs with a 0..1 planar map of the world rectangle lo..hi (x, z):
-    u runs along +X (the viewer's left to right when facing the model), v along +Z. Used for the avatar's Face
-    screen, where Unity draws the webcam."""
+    u runs along +X (the viewer's left to right when facing the model), v along +Z. Used for the screens Unity draws
+    pictures on: the avatar's Face (the webcam) and the projection's Screen (a shared screen)."""
+    bpy.context.view_layer.update()  # a new object's matrix_world isn't its location until the scene updates
     mw = ob.matrix_world
     me = ob.data
     uv = me.uv_layers.active.data

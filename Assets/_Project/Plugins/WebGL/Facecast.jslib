@@ -23,6 +23,14 @@ mergeInto(LibraryManager.library, {
     if (window.facecast) window.facecast.toggleCam();
   },
 
+  FC_ToggleShare: function () {
+    if (window.facecast) window.facecast.toggleShare();
+  },
+
+  FC_ShareAt: function (x, y, z, yaw) {
+    if (window.facecast) window.facecast.shareAt(x, y, z, yaw);
+  },
+
   FC_ToggleZoom: function () {
     if (window.facecast) window.facecast.toggleZoom();
   },

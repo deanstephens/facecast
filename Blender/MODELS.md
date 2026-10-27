@@ -21,8 +21,9 @@ Build: `/Applications/Blender.app/Contents/MacOS/Blender -b --factory-startup -P
   mesh carries the single material `M_Vertex`. Vertex alpha tells Unity's `Facecast/Flat` shader how to treat a
   corner: `Tint`, `TintShade`, `TintDark` are greys multiplied by the avatar's chosen colour; `HoverGlow` and
   `LampGlow` always glow; `Signal` corners glow in the avatar's colour while its player speaks.
-* No textures. The one exception is the avatar's `Face`, which has planar 0..1 UVs for the webcam picture. (The
-  handwriting on sticky notes and the boards' titles is drawn by Unity, not modelled.)
+* No textures. The exceptions are the avatar's `Face` and the projection's `Screen`, which have planar 0..1 UVs for
+  the webcam picture and the shared screen. (The handwriting on notes, cards and plates is drawn by Unity, not
+  modelled.)
 
 ## Style
 
@@ -94,3 +95,18 @@ finds these parts by name.
 | `Card` | (0, 0, 0) | Cream (`CardPaper`, not tinted), with a red rule 4.6 cm above the middle; Unity writes below it. |
 
 Box ≈ 650 tris, table 440, a card 24.
+
+## The projection screen (`models_projection.py`)
+
+What a shared screen shows on: a pull-up projection screen in the sharer's colour, which Unity unrolls in front of
+them (`Projection`).
+
+| Model / child | Pivot | What Unity does with it |
+|---|---|---|
+| `ProjectionScreen` | ground, (0, 0, 0) | 2.59 m wide, 2.15 m tall; faces -Y (towards the sharer). Unity gives it a box collider. |
+| `Case` | (0, 0, 0) | The case the screen rolls out of, on two feet; the case is `Tint` (the sharer's colour). |
+| `Plate` | the plate's face, (0, -0.08, 0.69) | Cream plate on the case's front: Unity writes the sharer's name. |
+| `Rig` | the case's slot, (0, 0, 0.76) | The side poles, the top bar and the grey back. Unity scales it up from its pivot to unroll it. |
+| `Screen` | the middle of its bottom edge, (0, -0.012, 0.76) | **The picture**: 2.4 × 1.35 m (16:9), its face at y = -0.012, UVs 0..1 across it (u from the viewer's left to right, v up). Drawn with `Facecast/Screen`; unrolled with the Rig. |
+
+504 tris.

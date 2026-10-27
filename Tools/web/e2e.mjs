@@ -3,8 +3,10 @@
 // avatar's face screen and receive their voice. The fake cameras show a portrait (fixtures/face.mjpeg), so the face
 // zoom must find the face, zoom in on it and send the crop to the other. Then one writes a sticky note in the page's
 // editor and sticks it on a noticeboard, and the other sees it and moves it; she posts a question in the question box,
-// and he pulls it out and lays it on the table; and a third browser arriving later finds the note where it was moved
-// to and the question on the table. Screenshots land in Screenshots/web_*.png.
+// and he pulls it out and lays it on the table. He shares his screen (Chrome's fake screen): a projection goes up in
+// front of him, and she must get its place and its picture. A third browser arriving later must find the note where
+// it was moved to, the question on the table and his projection; when he stops sharing it comes down for everyone.
+// Screenshots land in Screenshots/web_*.png.
 //
 //   cd Tools/web && npm install && npm run e2e            (needs a web build in Builds/WebGL and Google Chrome)
 //   npm run e2e -- --headed                                (watch it happen)
@@ -242,6 +244,32 @@ try {
   await sleep(1500)
   await b.page.screenshot({path: path.join(shots, 'web_table.png')})
 
+  // Sharing a screen: Ben presses the share button (Chrome's fake screen stands in for his); his projection goes up in
+  // front of him; Ana gets its place and his screen's picture, and stands in front of it.
+  log('screens: Ben shares his screen…')
+  await b.page.evaluate(() => window.facecast.debug.unity('teleport 0 -11 0 0'))
+  await sleep(600)
+  await b.page.click('#hudShare')
+  const shared = await until("Ben's projection to go up", () => b.page.evaluate(() => {
+    const s = window.facecast.debug.shares().mine
+    return s && s.at ? s : null
+  }), 20)
+  const [sx, , sz, syaw] = shared.at
+  log(`Ben's projection is up at ${sx.toFixed(2)}, ${sz.toFixed(2)} facing ${syaw.toFixed(0)}°; his screen is ${shared.video}`)
+  const ahead = sz + 11
+  if (Math.abs(sx) > 0.05 || ahead < 1.5 || ahead > 2.85) failures.push(`Ben's projection isn't in front of him: ${shared.at}`)
+  const screen = await until("Ana to get Ben's screen on his projection", () => a.page.evaluate(() =>
+    window.facecast.debug.shares().peers.find(p => p.on && p.uploads > 0) || null), 30)
+  log(`Ana sees Ben's screen (${screen.video}, ${screen.uploads} frames on the projection)`)
+  if (screen.at.some((v, i) => Math.abs(v - shared.at[i]) > 0.01)) failures.push(`Ana has Ben's projection at ${screen.at}, not ${shared.at}`)
+  await a.page.evaluate(([x, z]) => {
+    const ax = x + 1.4, az = z - 3.4
+    const yaw = Math.atan2(x - ax, z - az) * 180 / Math.PI
+    window.facecast.debug.unity(`teleport ${ax} ${az} ${(yaw + 360) % 360} 2`)
+  }, [sx, sz])
+  await sleep(2000)
+  await a.page.screenshot({path: path.join(shots, 'web_projection.png')})
+
   // Someone arriving later gets the boards from the people already here.
   const c = await open('Cy')
   await c.page.goto(`${base}?autojoin&name=Cy&cam=0&mic=0#${room}`)
@@ -249,6 +277,15 @@ try {
   await until('Cy to get the note, where Ben moved it', async () => near(await noteOnBoard(c.page, 'Hello from Ana'), 0.7, 0.4), 60)
   await until('Cy to find the question on the table', () => questionIn(c.page, 'table', "What's for lunch?"), 10)
   log('Cy, arriving later, finds the note where Ben moved it and the question on the table')
+  await until("Cy to get Ben's screen", () => c.page.evaluate(() => window.facecast.debug.shares().peers.some(p => p.on && p.uploads > 0)), 30)
+  log("…and Ben's projection, with his screen on it")
+
+  // Ben stops sharing: his projection comes down for everyone.
+  await b.page.click('#hudShare')
+  for (const {name, page} of [a, c])
+    await until(`${name} to see Ben's projection come down`, () => page.evaluate(() => !window.facecast.debug.shares().peers.some(p => p.on)), 10)
+  if (await b.page.evaluate(() => window.facecast.debug.shares().mine)) failures.push("Ben's page still thinks he's sharing")
+  log('Ben stopped sharing; his projection came down for Ana and Cy')
 } catch (e) {
   failures.push(e.message)
 } finally {

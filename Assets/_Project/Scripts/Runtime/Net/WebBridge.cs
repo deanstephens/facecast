@@ -15,6 +15,8 @@ namespace Facecast
         [DllImport("__Internal")] static extern void FC_ToggleMic();
         [DllImport("__Internal")] static extern void FC_ToggleCam();
         [DllImport("__Internal")] static extern void FC_ToggleZoom();
+        [DllImport("__Internal")] static extern void FC_ToggleShare();
+        [DllImport("__Internal")] static extern void FC_ShareAt(float x, float y, float z, float yaw);
         [DllImport("__Internal")] static extern int FC_VideoCrop(string key, float[] crop);
         [DllImport("__Internal")] static extern float FC_AudioLevel(string key);
         [DllImport("__Internal")] static extern int FC_CreateVideoTexture();
@@ -31,6 +33,10 @@ namespace Facecast
         public static void ToggleMic() => FC_ToggleMic();
         public static void ToggleCam() => FC_ToggleCam();
         public static void ToggleZoom() => FC_ToggleZoom();
+        /// <summary>Starts sharing your screen (the browser asks which), or stops.</summary>
+        public static void ToggleShare() => FC_ToggleShare();
+        /// <summary>Where your projection went up: the page tells everyone, and sends them your screen.</summary>
+        public static void ShareAt(float x, float y, float z, float yaw) => FC_ShareAt(x, y, z, yaw);
         /// <summary>
         /// The part of <paramref name="key"/>'s picture their face is in, into <paramref name="crop"/> (x, y, w, h:
         /// fractions of the picture from its top left). False when the whole picture should show.
@@ -55,6 +61,8 @@ namespace Facecast
         public static void ToggleMic() { }
         public static void ToggleCam() { }
         public static void ToggleZoom() { }
+        public static void ToggleShare() { }
+        public static void ShareAt(float x, float y, float z, float yaw) { }
         public static bool VideoCrop(string key, float[] crop) => false;
         public static float AudioLevel(string key) => 0f;
         public static int CreateVideoTexture() => 0;

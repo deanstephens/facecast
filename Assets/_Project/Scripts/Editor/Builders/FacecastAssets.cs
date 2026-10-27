@@ -11,7 +11,8 @@ namespace Facecast.EditorTools
     /// <summary>
     /// Shared generated assets: materials, one prefab per Blender model (the avatar with its <see cref="AvatarRig"/>,
     /// the noticeboard with its <see cref="Noticeboard"/>, the sticky note and question card with their
-    /// <see cref="NoteView"/>s, the question box and table, the scenery with colliders), the UI and handwriting fonts
+    /// <see cref="NoteView"/>s, the question box and table, the projection screen with its <see cref="Projection"/>, the
+    /// scenery with colliders), the UI and handwriting fonts
     /// and PanelSettings, the post-processing profile and the render pipeline settings.
     /// </summary>
     public static class FacecastAssets
@@ -80,6 +81,7 @@ namespace Facecast.EditorTools
             note.SetFloat("_AmbientScale", 1.1f);
             note.enableInstancing = true;
             EnsureMaterial("M_Ink", "Facecast/Ink");
+            EnsureMaterial("M_Screen", "Facecast/Screen");
             // A clear late-afternoon sky.
             var sky = EnsureMaterial("M_Sky", "Skybox/Procedural");
             sky.SetFloat("_SunDisk", 2f);
@@ -111,6 +113,7 @@ namespace Facecast.EditorTools
                 else if (name == "QuestionCard") SetUpNoteView(go, "Card", true);
                 else if (name == "QuestionBox") SetUpQuestionBox(go);
                 else if (name == "QuestionTable") SetUpQuestionTable(go);
+                else if (name == "ProjectionScreen") SetUpProjection(go);
                 else SetUpScenery(name, go);
                 PrefabUtility.SaveAsPrefabAsset(go, $"{Paths.PrefabsDir}/{name}.prefab");
                 Object.DestroyImmediate(go);
@@ -210,6 +213,22 @@ namespace Facecast.EditorTools
             var box = go.AddComponent<QuestionBox>();
             box.Bind();
             if (!box.Body || !box.Cards || !box.Label) throw new System.Exception("QuestionBox.fbx is missing Box, Cards or Label (see Blender/MODELS.md)");
+        }
+
+        /// <summary>The shared screen on <c>M_Screen</c>, the rest scenery; solid where it stands, once it's unrolled.</summary>
+        static void SetUpProjection(GameObject go)
+        {
+            foreach (var r in go.GetComponentsInChildren<MeshRenderer>()) Plain(r, Mat("M_Scenery"));
+            var projection = go.AddComponent<Projection>();
+            projection.Bind();
+            if (!projection.Screen || !projection.Rig || !projection.Plate || !projection.CaseRenderer)
+                throw new System.Exception("ProjectionScreen.fbx is missing Screen, Rig, Plate or Case (see Blender/MODELS.md)");
+            Plain(projection.ScreenRenderer, Mat("M_Screen"));
+            projection.ScreenRenderer.shadowCastingMode = ShadowCastingMode.Off;
+            projection.Plate.GetComponent<MeshRenderer>().shadowCastingMode = ShadowCastingMode.Off;
+            var solid = go.AddComponent<BoxCollider>();
+            solid.center = new Vector3(0f, 1.1f, 0f);
+            solid.size = new Vector3(2.6f, 2.2f, 0.3f);
         }
 
         static void SetUpQuestionTable(GameObject go)

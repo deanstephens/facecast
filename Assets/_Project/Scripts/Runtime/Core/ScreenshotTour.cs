@@ -10,7 +10,7 @@ namespace Facecast
     /// you and saves your first-person view, a close-up of a face screen and a wider shot with their names (one of
     /// them carrying a note); then it writes a note at a noticeboard, holds it, holds it up to the board and sticks
     /// it; then it starts writing a question, pulls one out of the question box, reads it and lays it on the table;
-    /// and quits.
+    /// then it puts up the offline demo of a shared screen; and quits.
     /// </summary>
     public sealed class ScreenshotTour : MonoBehaviour
     {
@@ -143,6 +143,28 @@ namespace Facecast
                 var corner = (box.transform.position + table.transform.position) * 0.5f;
                 Look(cam, corner + box.transform.forward * 2.4f + box.transform.right * 0.5f + Vector3.up * 1.9f, corner + Vector3.up * 0.75f);
                 yield return Shot("question_corner");
+            }
+
+            // A shared screen: the offline demo projection, put up in front of you on the west path, from where you
+            // stand and from the side.
+            var projections = Projections.Instance;
+            if (projections)
+            {
+                cam.transform.SetParent(player.transform, false);
+                cam.transform.localPosition = new Vector3(0f, LocalPlayer.EyeHeight, 0f);
+                player.Teleport(new AvatarPose(new Vector3(-10.4f, 0f, 0.4f), 270f, 4f));
+                yield return null;
+                projections.ToggleDemo();
+                yield return new WaitForSeconds(1.2f);
+                yield return Shot("projection");
+                var screen = projections.Get(Projections.Self);
+                if (screen)
+                {
+                    var t = screen.transform;
+                    cam.transform.SetParent(null, true);
+                    Look(cam, t.position + t.forward * 3.6f + t.right * 1.8f + Vector3.up * 1.7f, t.position + Vector3.up * 1.3f);
+                    yield return Shot("projection_wide");
+                }
             }
 
             Debug.Log("[ScreenshotTour] Done");

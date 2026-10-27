@@ -15,6 +15,9 @@ namespace Facecast
         /// <summary>The video key of your own camera (demo bots wear it in a web build).</summary>
         public const string Self = "self";
 
+        /// <summary>The video key of <paramref name="owner"/>'s shared screen (a peer id, or <see cref="Self"/>).</summary>
+        public static string ScreenOf(string owner) => "screen:" + owner;
+
         sealed class Feed
         {
             public int Id;
@@ -99,6 +102,24 @@ namespace Facecast
             }
             float t = videoAspect / screenAspect;      // taller picture: crop top and bottom
             return new Vector4(1f, t, 0f, (1f - t) * 0.5f);
+        }
+
+        /// <summary>
+        /// How to fit a whole picture of <paramref name="videoSize"/> into a screen of <paramref name="screenAspect"/>,
+        /// leaving bars where their shapes differ (like CSS object-fit: contain): the picture's UVs are
+        /// (screen UV - zw) / xy, and it covers the screen where those fall in 0..1.
+        /// </summary>
+        public static Vector4 AspectFit(Vector2Int videoSize, float screenAspect)
+        {
+            if (videoSize.x <= 0 || videoSize.y <= 0) return new Vector4(1, 1, 0, 0);
+            float videoAspect = (float)videoSize.x / videoSize.y;
+            if (videoAspect > screenAspect)
+            {
+                float h = screenAspect / videoAspect;  // wider picture: bars above and below
+                return new Vector4(1f, h, 0f, (1f - h) * 0.5f);
+            }
+            float w = videoAspect / screenAspect;      // narrower picture: bars at the sides
+            return new Vector4(w, 1f, (1f - w) * 0.5f, 0f);
         }
 
         /// <summary>

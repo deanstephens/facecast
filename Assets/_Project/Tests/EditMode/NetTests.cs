@@ -98,6 +98,22 @@ namespace Facecast.Tests
         }
 
         [Test]
+        public void ASharedScreenIsFittedWholeWithBars()
+        {
+            float screen = 16f / 9f;
+            Assert.That(VideoCrop.AspectFit(new Vector2Int(1920, 1080), screen), Is.EqualTo(new Vector4(1, 1, 0, 0)), "16:9 fills it");
+            var narrow = VideoCrop.AspectFit(new Vector2Int(1024, 768), screen);  // 4:3: bars at the sides
+            Assert.That(narrow.x, Is.EqualTo(0.75f).Within(1e-4f));
+            Assert.That(narrow.y, Is.EqualTo(1f));
+            Assert.That(narrow.z, Is.EqualTo(0.125f).Within(1e-4f));
+            var wide = VideoCrop.AspectFit(new Vector2Int(3440, 1440), screen);   // ultrawide: bars above and below
+            Assert.That(wide.x, Is.EqualTo(1f));
+            Assert.That(wide.y, Is.EqualTo(screen / (3440f / 1440f)).Within(1e-4f));
+            Assert.That(wide.w, Is.EqualTo((1f - wide.y) / 2f).Within(1e-4f));
+            Assert.That(VideoCrop.AspectFit(Vector2Int.zero, screen), Is.EqualTo(new Vector4(1, 1, 0, 0)));
+        }
+
+        [Test]
         public void AFaceCropFromThePageTurnsIntoTheScreensUvs()
         {
             // The page measures from the picture's top left; the texture's v runs up from the bottom.
