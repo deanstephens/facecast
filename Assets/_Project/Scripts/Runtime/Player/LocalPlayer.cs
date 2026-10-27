@@ -5,9 +5,9 @@ namespace Facecast
 {
     /// <summary>
     /// You, in first person. Click to capture the mouse and look around (Esc lets go), WASD or the arrow keys to walk,
-    /// Shift to run, Space to jump; M and V switch your microphone and camera (in the web build). Your own avatar is
-    /// invisible to you but casts its shadow. Your pose goes to the room 15 times a second. Before you join, the
-    /// camera circles the square slowly behind the page's join card.
+    /// Shift to run, Space to jump; M and V switch your microphone and camera (in the web build). Sticky notes are
+    /// <see cref="NoteHand"/>'s. Your own avatar is invisible to you but casts its shadow. Your pose goes to the room
+    /// 15 times a second. Before you join, the camera circles the square slowly behind the page's join card.
     /// </summary>
     [RequireComponent(typeof(CharacterController))]
     public sealed class LocalPlayer : MonoBehaviour
@@ -27,6 +27,8 @@ namespace Facecast
         public bool Spawned { get; private set; }
         /// <summary>Off while the screenshot tour moves the camera.</summary>
         public bool InputEnabled { get; set; } = true;
+        /// <summary>A note is open to write on: the keys are for that, so you stand still.</summary>
+        public bool Typing { get; set; }
         public AvatarRig Avatar { get; private set; }
         public AvatarPose Pose => new(transform.position, _yaw, _pitch);
         /// <summary>How you actually moved last frame (walls stop you), for your avatar's lean and stride.</summary>
@@ -109,7 +111,8 @@ namespace Facecast
                 Orbit();
                 return;
             }
-            if (InputEnabled)
+            if (InputEnabled && Typing) Step(Vector2.zero, Vector2.zero, false, false, dt);
+            else if (InputEnabled)
             {
                 bool locked = Cursor.lockState == CursorLockMode.Locked;
                 if (_click.WasPressedThisFrame() && !locked)

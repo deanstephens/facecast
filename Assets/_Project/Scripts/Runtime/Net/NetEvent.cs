@@ -11,6 +11,8 @@ namespace Facecast
     /// <item><c>hello</c>: peer <see cref="id"/> introduced itself, or changed its name, colour, <see cref="cam"/> or <see cref="mic"/>.</item>
     /// <item><c>pose</c>: peer <see cref="id"/> moved; <see cref="p"/> is <see cref="AvatarPose.ToWire"/>.</item>
     /// <item><c>leave</c>: peer <see cref="id"/> left.</item>
+    /// <item><c>notes</c>: peer <see cref="id"/> sent <see cref="notes"/> (changes, or every note when you arrive).</item>
+    /// <item><c>write</c>: the page's note editor closed: <see cref="ok"/> with <see cref="text"/> in colour <see cref="tint"/>, or cancelled.</item>
     /// </list>
     /// </summary>
     [Serializable]
@@ -24,6 +26,10 @@ namespace Facecast
         public bool mic;
         public float[] p;
         public string room;
+        public NoteData[] notes;
+        public string text;
+        public int tint;
+        public bool ok;
 
         public static NetEvent Parse(string json)
         {

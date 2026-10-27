@@ -1,6 +1,8 @@
 // End-to-end test of the web build: two Chrome windows with fake cameras and microphones join the same room over
 // the real signalling network, find each other, stand face to face, and must each see the other's camera on their
-// avatar's face screen and receive their voice. Screenshots of both views land in Screenshots/web_*.png.
+// avatar's face screen and receive their voice. Then one writes a sticky note in the page's editor and sticks it on a
+// noticeboard, the other sees it and moves it, and a third browser arriving later finds it where it was moved to.
+// Screenshots land in Screenshots/web_*.png.
 //
 //   cd Tools/web && npm install && npm run e2e            (needs a web build in Builds/WebGL and Google Chrome)
 //   npm run e2e -- --headed                                (watch it happen)
@@ -59,21 +61,27 @@ const browserArgs = [
 ]
 const failures = []
 const browsers = []
+
+// Separate browsers: separate profiles, separate WebRTC stacks.
+async function open(name) {
+  const browser = await chromium.launch({executablePath: chrome, headless: !headed, args: browserArgs})
+  browsers.push(browser)
+  const page = await browser.newPage({viewport: {width: 1280, height: 720}})
+  page.on('console', m => {
+    const text = m.text()
+    if (m.type() === 'error' || /\[(Room|App|facecast|Noticeboards|NoteHand)\]|Exception|WebGL: INVALID/.test(text)) log(`${name}:`, text.slice(0, 300))
+    if (/Exception|WebGL: INVALID|INVALID_OPERATION/.test(text)) failures.push(`${name}: ${text.slice(0, 200)}`)
+  })
+  page.on('pageerror', e => { log(`${name} page error:`, e.message); failures.push(`${name}: ${e.message}`) })
+  return {name, page}
+}
+
+// The note saying `text` on the first board, as the game in `page` has it.
+const noteOnBoard = (page, text) => page.evaluate(t => (window.facecast.debug.notes()?.boards[0].notes || []).find(n => n.text === t) || null, text)
+const near = (n, x, y) => n && Math.abs(n.x - x) < 0.02 && Math.abs(n.y - y) < 0.02
+
 try {
-  const pages = []
-  for (const name of ['Ana', 'Ben']) {
-    // Separate browsers: separate profiles, separate WebRTC stacks.
-    const browser = await chromium.launch({executablePath: chrome, headless: !headed, args: browserArgs})
-    browsers.push(browser)
-    const page = await browser.newPage({viewport: {width: 1280, height: 720}})
-    page.on('console', m => {
-      const text = m.text()
-      if (m.type() === 'error' || /\[(Room|App|facecast)\]|Exception|WebGL: INVALID/.test(text)) log(`${name}:`, text.slice(0, 300))
-      if (/Exception|WebGL: INVALID|INVALID_OPERATION/.test(text)) failures.push(`${name}: ${text.slice(0, 200)}`)
-    })
-    page.on('pageerror', e => { log(`${name} page error:`, e.message); failures.push(`${name}: ${e.message}`) })
-    pages.push({name, page})
-  }
+  const pages = [await open('Ana'), await open('Ben')]
   const [a, b] = pages
 
   // Ana goes through the join card like a person: types her name, picks coral, presses Join.
@@ -87,7 +95,8 @@ try {
   const typed = await a.page.inputValue('#name')
   if (typed !== 'Ana') failures.push(`typing in the name field gave "${typed}"`)
   await a.page.click('[aria-label="#F2705A"]')
-  await a.page.click('#join')
+  await a.page.focus('#room')
+  await a.page.keyboard.press('Enter')  // Enter in a field joins
   // Ben skips the card.
   await b.page.goto(`${base}?autojoin&name=Ben&color=4CC9A0#${room}`)
   log(`room ${room}; waiting for both to load and join…`)
@@ -107,7 +116,7 @@ try {
   }
 
   // Face to face, a metre and a half apart, then look at each other.
-  await a.page.evaluate(() => window.facecast.debug.unity('teleport 0 -6 0 4'))
+  await a.page.evaluate(() => window.facecast.debug.unity('teleport 0 -6 0 4'))  // out of Ben's way
   await b.page.evaluate(() => window.facecast.debug.unity('teleport 0 -4.5 180 4'))
   await sleep(2500)
 
@@ -132,6 +141,47 @@ try {
     const uploads = await page.evaluate(() => window.facecast.debug.uploads())
     log(`${name}: ${file}  (frames copied per feed: ${JSON.stringify(uploads)})`)
   }
+
+  // Sticky notes. Ana walks up to the first noticeboard and takes a note from its blue notepad; the page's note
+  // editor opens; she writes on it, makes it green, and sticks it on the board.
+  log('notes: Ana writes a note and sticks it on the first board…')
+  await a.page.evaluate(() => { window.facecast.debug.unity('note goto 0'); window.facecast.debug.unity('note take 2') })
+  await until('the note editor to open', () => a.page.evaluate(() => window.facecast.debug.writing() && !document.getElementById('noteEditor').hidden), 10)
+  await a.page.keyboard.type('Hello from Ana')  // the editor has the focus
+  await a.page.click('[aria-label="Green"]')
+  await sleep(400)  // the paper's colour fades over
+  await a.page.screenshot({path: path.join(shots, 'web_note_editor.png')})
+  await a.page.focus('#noteText')
+  await a.page.keyboard.press('ControlOrMeta+Enter')
+  const held = await until('Ana to hold her note', () => a.page.evaluate(() => window.facecast.debug.notes()?.held), 10)
+  await a.page.evaluate(() => window.facecast.debug.unity('note stick 0 0.3 0.6'))
+  const mine = await until("Ana's note on her board", () => noteOnBoard(a.page, 'Hello from Ana'), 10)
+  if (mine.id !== held || mine.color !== 3 || mine.by !== 'Ana' || !near(mine, 0.3, 0.6))
+    failures.push(`Ana's note came out wrong: ${JSON.stringify(mine)}`)
+  await a.page.evaluate(() => window.facecast.debug.unity('teleport 0 -6 0 4'))  // out of Ben's way
+
+  // Ben sees it arrive, then moves it.
+  const seen = await until("Ana's note on Ben's board", () => noteOnBoard(b.page, 'Hello from Ana'), 20)
+  if (!near(seen, 0.3, 0.6)) failures.push(`Ben has Ana's note at ${seen.x}, ${seen.y}`)
+  log(`Ben sees "${seen.text}" by ${seen.by} on the first board; he moves it`)
+  await sleep(1000)  // Ana's avatar walking off the spot, on Ben's screen
+  await b.page.evaluate(id => {
+    const unity = window.facecast.debug.unity
+    unity('note goto 0')
+    unity(`note pick ${id}`)
+    unity('note stick 0 0.7 0.4')
+  }, seen.id)
+  await until('Ana to see it move', async () => near(await noteOnBoard(a.page, 'Hello from Ana'), 0.7, 0.4), 20)
+  log('Ana sees it where Ben put it')
+  await sleep(1500)
+  await b.page.screenshot({path: path.join(shots, 'web_board.png')})
+
+  // Someone arriving later gets the boards from the people already here.
+  const c = await open('Cy')
+  await c.page.goto(`${base}?autojoin&name=Cy&cam=0&mic=0#${room}`)
+  await until('Cy to join', () => c.page.evaluate(() => window.facecast?.debug.joined()), 120)
+  await until('Cy to get the note, where Ben moved it', async () => near(await noteOnBoard(c.page, 'Hello from Ana'), 0.7, 0.4), 60)
+  log('Cy, arriving later, finds the note where Ben moved it')
 } catch (e) {
   failures.push(e.message)
 } finally {

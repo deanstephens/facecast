@@ -15,6 +15,12 @@
   --font: ui-rounded, "SF Pro Rounded", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
 }
 
+@font-face {
+  font-family: "Patrick Hand";
+  src: url("fonts/PatrickHand-Regular.ttf") format("truetype");
+  font-display: swap;
+}
+
 * { box-sizing: border-box; }
 
 html, body {
@@ -296,6 +302,92 @@ svg { display: block; }
 .toast.bad { background: rgba(160, 40, 30, 0.9); }
 .toast.fade { opacity: 0; transition: opacity 0.4s; }
 @keyframes toast-in { from { opacity: 0; transform: translateY(-6px); } }
+
+/* ------------------------------------------------------------------ the note you write on */
+
+.note-editor {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgba(18, 24, 44, 0.35);
+  z-index: 20;
+}
+.note-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  width: min(380px, 100%);
+  animation: note-in 0.18s ease-out;
+}
+@keyframes note-in { from { opacity: 0; transform: translateY(10px) scale(0.97); } }
+.note-paper {
+  --note: #ffe27a;
+  position: relative;
+  display: flex;
+  width: 100%;
+  aspect-ratio: 1;
+  padding: 30px 26px 30px;
+  background: var(--note);
+  transform: rotate(-1.5deg);
+  box-shadow: 0 22px 44px rgba(20, 30, 60, 0.35), 0 -8px 0 rgba(0, 0, 0, 0.06) inset;
+  transition: background-color 0.15s;
+}
+/* The glue strip along the top catches the light a little differently. */
+.note-paper::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 16%;
+  background: linear-gradient(rgba(0, 0, 0, 0.05), transparent);
+  pointer-events: none;
+}
+.note-paper textarea {
+  flex: 1;
+  width: 100%;
+  resize: none;
+  border: 0;
+  outline: none;
+  background: transparent;
+  font: 34px/1.2 "Patrick Hand", "Comic Sans MS", cursive;
+  color: #26305a;
+  text-align: center;
+  overflow: hidden;
+}
+.note-paper textarea::placeholder { color: rgba(38, 48, 90, 0.4); }
+.note-count {
+  position: absolute;
+  right: 14px;
+  bottom: 10px;
+  font-size: 13px;
+  color: rgba(38, 48, 90, 0.55);
+}
+.note-colors { display: flex; gap: 10px; }
+.note-colors button {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 3px solid #fff;
+  border-radius: 7px;
+  box-shadow: 0 0 0 1.5px var(--line);
+}
+.note-colors button[aria-checked="true"] { box-shadow: 0 0 0 2.5px var(--ink); }
+.note-actions { display: flex; gap: 10px; }
+.note-button {
+  padding: 10px 24px;
+  border: 0;
+  border-radius: 16px;
+  background: var(--glass);
+  color: var(--cream);
+  font-size: 16px;
+  font-weight: 600;
+}
+.note-button:hover { background: rgba(28, 36, 64, 0.92); }
+.note-button.primary { background: var(--ink); }
+.note-button.primary:hover { background: color-mix(in srgb, var(--ink) 85%, var(--me)); }
+.note-tip { margin: 0; color: var(--cream); font-size: 13.5px; text-align: center; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.55); }
 
 @media (max-width: 640px) {
   .card { left: 50%; transform: translate(-50%, -50%); padding: 18px; }

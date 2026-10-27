@@ -21,7 +21,8 @@ Build: `/Applications/Blender.app/Contents/MacOS/Blender -b --factory-startup -P
   mesh carries the single material `M_Vertex`. Vertex alpha tells Unity's `Facecast/Flat` shader how to treat a
   corner: `Tint`, `TintShade`, `TintDark` are greys multiplied by the avatar's chosen colour; `HoverGlow` and
   `LampGlow` always glow; `Signal` corners glow in the avatar's colour while its player speaks.
-* No textures. The one exception is the avatar's `Face`, which has planar 0..1 UVs for the webcam picture.
+* No textures. The one exception is the avatar's `Face`, which has planar 0..1 UVs for the webcam picture. (The
+  handwriting on sticky notes and the boards' titles is drawn by Unity, not modelled.)
 
 ## Style
 
@@ -55,3 +56,20 @@ Budget ≤ 5000 tris (now 4880).
 | `Planter` | 1.4 m square | Bush with a ring of flowers. |
 | `Hedge` | 3 × 0.85 × 1.4 m | Straight segment along X; Unity rings the square with them. |
 | `Hills` | 78–150 m ring | The horizon. No collider, no shadows. |
+
+## Noticeboards and sticky notes (`models_boards.py`)
+
+Four noticeboards stand round the square; people take sticky notes from the notepads on a board's shelf, write on
+them and stick them anywhere on its cork. Unity (`Noticeboard`, `NoteView`) finds these parts by name.
+
+| Model / child | Pivot | What Unity does with it |
+|---|---|---|
+| `NoticeBoard` | ground, (0, 0, 0) | 2.76 m wide, 2.76 m tall. Faces -Y, like everything. |
+| `Frame` | (0, 0, 0) | Posts, rails, backboard, roof, shelf. Its `Tint` corners (roof, title frame) take the board's colour. Mesh collider. |
+| `Cork` | the cork's surface centre, (0, -0.03, 1.5) | **2.1 × 1.25 m**, its surface flush with the pivot (the rails stand 2.2 cm proud of it). Notes are stuck on it; Unity reads its size from the mesh bounds and gives it a box collider to point at. |
+| `Header` | the plate's front centre, (0, -0.032, 2.305) | Cream title plate, 1.24 × 0.18 m. Unity writes the board's title on it. |
+| `PadYellow`, `PadPink`, `PadBlue`, `PadGreen` | the top sheet's centre, (x, -0.145, 0.85) with x = -0.72, -0.24, 0.24, 0.72 | Stacks of notes on the shelf, left to right as you face the board; their colours are Unity's `Notes.Colors` in order. Box colliders: click one to take a note. |
+| `StickyNote` | the centre of its back, (0, 0, 0) | One note: 0.2 m square, 1.2 mm thick, its front at y = -0.0012. |
+| `Paper` | (0, 0, 0) | The paper, all `Tint` (Unity multiplies by the note's colour). The bottom 3 cm curls up to 7 mm off the board at one corner, so Unity writes only on the flat part above it. |
+
+Board budget ≈ 2100 tris; a note 156.

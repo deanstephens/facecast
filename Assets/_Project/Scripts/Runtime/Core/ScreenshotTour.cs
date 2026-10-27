@@ -7,7 +7,9 @@ namespace Facecast
     /// <summary>
     /// Unattended screenshot tour, to check the look. Launch a desktop build (or the Editor) with
     /// <c>-autocapture &lt;dir&gt;</c>: it photographs the square from above, then poses three demo bots in front of
-    /// you and saves your first-person view, a close-up of a face screen and a wider shot with their names, then quits.
+    /// you and saves your first-person view, a close-up of a face screen and a wider shot with their names (one of
+    /// them carrying a note); then it writes a note at a noticeboard, holds it, holds it up to the board and sticks
+    /// it, and quits.
     /// </summary>
     public sealed class ScreenshotTour : MonoBehaviour
     {
@@ -63,8 +65,50 @@ namespace Facecast
                 yield return Shot("face_closeup");
             }
 
+            var boards = Noticeboards.Instance;
+            if (bots.Count >= 3 && boards)
+            {
+                var carrier = bots.AvatarOf(1).Id;
+                boards.Receive(new[] { new NoteData { id = "tour-carried", holder = carrier, color = 1, text = "Hello!", by = "Kit", v = 1000, w = carrier } }, carrier);
+            }
+            yield return null;
             Look(cam, you + new Vector3(2.2f, 2.6f, -2.4f), new Vector3(0f, 1.3f, -4.2f));
             yield return Shot("group");
+
+            // At the first noticeboard: write a note, hold it up where it'll go, stick it.
+            var hand = NoteHand.Instance;
+            if (boards && hand)
+            {
+                var board = boards.Boards[0];
+                var spot = new Vector2(0.63f, 0.4f);
+                cam.transform.SetParent(player.transform, false);
+                cam.transform.localPosition = new Vector3(0f, LocalPlayer.EyeHeight, 0f);
+                var stand = board.ReadingPose(1.3f).Position;
+                player.Teleport(Facing(stand, board.WorldPoint(new Vector2(0.5f, 0.45f))));
+                hand.Take(2);
+                yield return null;
+                var overlay = Overlay.Instance;
+                if (overlay && overlay.NoteEditorOpen)
+                {
+                    overlay.NoteDraft = "Picnic on the lawn, Saturday at noon!";
+                    yield return Shot("note_editor");
+                    overlay.FinishNote(true);
+                }
+                hand.AlwaysAim = true;
+                player.Teleport(Facing(stand, new Vector3(0f, 1.2f, 0f)));  // turned away, towards the fountain
+                yield return null;
+                yield return Shot("note_in_hand");
+                player.Teleport(Facing(stand, board.WorldPoint(spot)));
+                yield return null;
+                yield return Shot("noticeboard");
+                hand.Stick(0, spot);
+                hand.AlwaysAim = false;
+                yield return null;
+                cam.transform.SetParent(null, true);
+                var side = board.WorldPoint(new Vector2(-0.35f, 0.25f), 2.1f);
+                Look(cam, side, board.WorldPoint(new Vector2(0.55f, 0.45f)));
+                yield return Shot("board_wide");
+            }
 
             Debug.Log("[ScreenshotTour] Done");
 #if UNITY_EDITOR
@@ -72,6 +116,15 @@ namespace Facecast
 #else
             Application.Quit();
 #endif
+        }
+
+        /// <summary>Standing at <paramref name="feet"/>, eyes on <paramref name="at"/>.</summary>
+        static AvatarPose Facing(Vector3 feet, Vector3 at)
+        {
+            var d = at - (feet + Vector3.up * LocalPlayer.EyeHeight);
+            float yaw = Mathf.Atan2(d.x, d.z) * Mathf.Rad2Deg;
+            float pitch = -Mathf.Atan2(d.y, new Vector2(d.x, d.z).magnitude) * Mathf.Rad2Deg;
+            return new AvatarPose(feet, Mathf.Repeat(yaw, 360f), pitch);
         }
 
         static void Look(Camera cam, Vector3 from, Vector3 at) =>

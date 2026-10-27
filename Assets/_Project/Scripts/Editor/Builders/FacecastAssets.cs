@@ -10,7 +10,8 @@ namespace Facecast.EditorTools
 {
     /// <summary>
     /// Shared generated assets: materials, one prefab per Blender model (the avatar with its <see cref="AvatarRig"/>,
-    /// the scenery with colliders), the UI font and PanelSettings, the post-processing profile and the render
+    /// the noticeboard with its <see cref="Noticeboard"/>, the sticky note with its <see cref="NoteView"/>, the scenery
+    /// with colliders), the UI and handwriting fonts and PanelSettings, the post-processing profile and the render
     /// pipeline settings.
     /// </summary>
     public static class FacecastAssets
@@ -73,6 +74,12 @@ namespace Facecast.EditorTools
             ground.SetFloat("_Wrap", 0.5f);
             ground.SetFloat("_Bands", 0.15f);
             ground.SetFloat("_AmbientScale", 1.05f);
+            var note = EnsureMaterial("M_Note", "Facecast/Flat");
+            note.SetFloat("_Bands", 0.1f);
+            note.SetFloat("_Wrap", 0.6f);
+            note.SetFloat("_AmbientScale", 1.1f);
+            note.enableInstancing = true;
+            EnsureMaterial("M_Ink", "Facecast/Ink");
             // A clear late-afternoon sky.
             var sky = EnsureMaterial("M_Sky", "Skybox/Procedural");
             sky.SetFloat("_SunDisk", 2f);
@@ -99,6 +106,8 @@ namespace Facecast.EditorTools
                 PrefabUtility.UnpackPrefabInstance(go, PrefabUnpackMode.Completely, InteractionMode.AutomatedAction);
                 go.name = name;
                 if (name == "Avatar") SetUpAvatar(go);
+                else if (name == "NoticeBoard") SetUpNoticeboard(go);
+                else if (name == "StickyNote") SetUpStickyNote(go);
                 else SetUpScenery(name, go);
                 PrefabUtility.SaveAsPrefabAsset(go, $"{Paths.PrefabsDir}/{name}.prefab");
                 Object.DestroyImmediate(go);
@@ -116,6 +125,55 @@ namespace Facecast.EditorTools
             foreach (var r in rig.BodyRenderers) Plain(r, Mat("M_Avatar"));
             Plain(rig.FaceRenderer, Mat("M_Face"));
             rig.FaceRenderer.shadowCastingMode = ShadowCastingMode.Off;
+        }
+
+        /// <summary>Colliders to walk into (the frame), to point at (the cork) and to take notes from (the pads).</summary>
+        static void SetUpNoticeboard(GameObject go)
+        {
+            foreach (var r in go.GetComponentsInChildren<MeshRenderer>()) Plain(r, Mat("M_Scenery"));
+            foreach (var mf in go.GetComponentsInChildren<MeshFilter>())
+            {
+                switch (mf.name)
+                {
+                    case "Frame":
+                        mf.gameObject.AddComponent<MeshCollider>().sharedMesh = mf.sharedMesh;
+                        break;
+                    case "Cork":
+                        mf.gameObject.AddComponent<BoxCollider>();  // sized to the mesh
+                        break;
+                    case "Header":
+                        mf.GetComponent<MeshRenderer>().shadowCastingMode = ShadowCastingMode.Off;
+                        break;
+                    default:
+                        // The notepads: a little taller than the stacks, so they're easy to point at.
+                        var pad = mf.gameObject.AddComponent<BoxCollider>();
+                        pad.size += new Vector3(0.02f, 0.05f, 0.02f);
+                        pad.center += new Vector3(0f, 0.01f, 0f);
+                        break;
+                }
+            }
+            var board = go.AddComponent<Noticeboard>();
+            board.Bind();
+            if (!board.CorkCollider || !board.Header || !board.FrameRenderer || System.Array.Exists(board.Pads, p => !p))
+                throw new System.Exception("NoticeBoard.fbx is missing Cork, Header, Frame or a pad (see Blender/MODELS.md)");
+        }
+
+        /// <summary>The paper, and an Ink child facing the reader just in front of it for the handwriting.</summary>
+        static void SetUpStickyNote(GameObject go)
+        {
+            var paper = System.Array.Find(go.GetComponentsInChildren<MeshRenderer>(), r => r.name == "Paper");
+            if (!paper) throw new System.Exception("StickyNote.fbx has no Paper (see Blender/MODELS.md)");
+            Plain(paper, Mat("M_Note"));
+            var ink = new GameObject("Ink", typeof(MeshFilter), typeof(MeshRenderer));
+            ink.transform.SetParent(paper.transform.parent, false);
+            // The paper's front is 1.2 mm off the board (+Z); the ink plane faces back out of it.
+            ink.transform.SetLocalPositionAndRotation(new Vector3(0f, 0f, 0.0016f), Quaternion.Euler(0f, 180f, 0f));
+            var inkRenderer = ink.GetComponent<MeshRenderer>();
+            Plain(inkRenderer, Mat("M_Ink"));
+            inkRenderer.shadowCastingMode = ShadowCastingMode.Off;
+            var view = go.AddComponent<NoteView>();
+            view.Paper = paper;
+            view.Ink = ink.GetComponent<MeshFilter>();
         }
 
         static void Plain(Renderer r, Material m)
@@ -181,9 +239,45 @@ namespace Facecast.EditorTools
                 fa.material.name = fontName + " Material";
                 AssetDatabase.AddObjectToAsset(fa.material, fa);
             }
+            CreateNoteFont();
             // The stylesheet names the font by path; re-import it now that the font exists.
             foreach (var sheet in new[] { Paths.UIDir + "/Facecast.uss", Paths.ThemePath })
                 if (File.Exists(sheet)) AssetDatabase.ImportAsset(sheet, ImportAssetOptions.ForceUpdate);
+        }
+
+        /// <summary>
+        /// Patrick Hand for the handwriting on notes and the boards' titles: a dynamic font asset (characters nobody
+        /// has written yet are added at runtime), its atlas started with Latin letters and punctuation.
+        /// </summary>
+        static void CreateNoteFont()
+        {
+            const string fontName = "PatrickHand-Regular";
+            var fa = AssetDatabase.LoadAssetAtPath<FontAsset>(Paths.NoteFontPath);
+            if (!fa)
+            {
+                var font = AssetDatabase.LoadAssetAtPath<Font>($"{Paths.FontsDir}/{fontName}.ttf");
+                fa = FontAsset.CreateFontAsset(font, 56, 7, UnityEngine.TextCore.LowLevel.GlyphRenderMode.SDFAA, 1024, 1024,
+                    UnityEngine.TextCore.Text.AtlasPopulationMode.Dynamic, false);
+                fa.name = fontName + "-SDF";
+                AssetDatabase.CreateAsset(fa, Paths.NoteFontPath);
+                fa.atlasTextures[0].name = fontName + " Atlas";
+                AssetDatabase.AddObjectToAsset(fa.atlasTextures[0], fa);
+                fa.material.name = fontName + " Material";
+                AssetDatabase.AddObjectToAsset(fa.material, fa);
+                var latin = new System.Text.StringBuilder();
+                for (char c = ' '; c <= '~'; c++) latin.Append(c);
+                for (char c = '\u00A1'; c <= '\u00FF'; c++) latin.Append(c);
+                latin.Append("‘’“”–—…•€");
+                fa.TryAddCharacters(latin.ToString(), out _);
+                EditorUtility.SetDirty(fa);
+                EditorUtility.SetDirty(fa.atlasTextures[0]);
+            }
+            var ink = Mat("M_Ink");
+            if (ink)
+            {
+                ink.SetTexture("_MainTex", fa.atlasTextures[0]);
+                EditorUtility.SetDirty(ink);
+            }
         }
 
         static void CreatePanelSettings()

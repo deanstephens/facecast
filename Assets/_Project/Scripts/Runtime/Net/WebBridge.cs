@@ -18,6 +18,10 @@ namespace Facecast
         [DllImport("__Internal")] static extern int FC_CreateVideoTexture();
         [DllImport("__Internal")] static extern int FC_UpdateVideoTexture(string key, int texture);
         [DllImport("__Internal")] static extern void FC_DeleteVideoTexture(int texture);
+        [DllImport("__Internal")] static extern void FC_SendNotes(string json, string target);
+        [DllImport("__Internal")] static extern void FC_OpenNoteEditor(string text, int color);
+        [DllImport("__Internal")] static extern void FC_CloseNoteEditor();
+        [DllImport("__Internal")] static extern void FC_ReportNotes(string json);
 
         public static bool Available => true;
         public static void Ready() => FC_Ready();
@@ -29,6 +33,13 @@ namespace Facecast
         /// <summary>Copies the newest frame of <paramref name="key"/>'s video into the texture. Returns width &lt;&lt; 16 | height, or 0 without video.</summary>
         public static int UpdateVideoTexture(string key, int texture) => FC_UpdateVideoTexture(key, texture);
         public static void DeleteVideoTexture(int texture) => FC_DeleteVideoTexture(texture);
+        /// <summary>Sends a "notes" message (a <see cref="NoteList"/>) to <paramref name="target"/>, or everyone when "".</summary>
+        public static void SendNotes(string json, string target) => FC_SendNotes(json, target ?? "");
+        /// <summary>Opens the page's note to write on; it answers with a "write" message.</summary>
+        public static void OpenNoteEditor(string text, int color) => FC_OpenNoteEditor(text ?? "", color);
+        public static void CloseNoteEditor() => FC_CloseNoteEditor();
+        /// <summary>What's on the boards, for the page's test hooks (facecast.debug.notes()).</summary>
+        public static void ReportNotes(string json) => FC_ReportNotes(json);
 #else
         public static bool Available => false;
         public static void Ready() { }
@@ -39,6 +50,10 @@ namespace Facecast
         public static int CreateVideoTexture() => 0;
         public static int UpdateVideoTexture(string key, int texture) => 0;
         public static void DeleteVideoTexture(int texture) { }
+        public static void SendNotes(string json, string target) { }
+        public static void OpenNoteEditor(string text, int color) { }
+        public static void CloseNoteEditor() { }
+        public static void ReportNotes(string json) { }
 #endif
     }
 }

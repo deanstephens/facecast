@@ -1,5 +1,6 @@
 // The game's side of the bridge to the page (WebGLTemplates/Facecast/facecast.js, which defines window.facecast).
-// C# calls these through WebBridge.cs. The page owns the WebRTC room, the camera, the microphone and the voice mix.
+// C# calls these through WebBridge.cs. The page owns the WebRTC room, the camera, the microphone, the voice mix and
+// the note you write on.
 //
 // Video: each face screen samples a WebGL texture created here and wrapped in C# with
 // Texture2D.CreateExternalTexture. Every frame, FC_UpdateVideoTexture copies the newest frame of a peer's <video>
@@ -88,6 +89,23 @@ mergeInto(LibraryManager.library, {
     texture.fcStamp = stamp;
     fc.countUpload(UTF8ToString(key));
     return size;
+  },
+
+  // Sticky notes: the game owns the boards; the page carries "notes" messages and shows the note you write on.
+  FC_SendNotes: function (json, target) {
+    if (window.facecast) window.facecast.sendNotes(UTF8ToString(json), UTF8ToString(target));
+  },
+
+  FC_OpenNoteEditor: function (text, color) {
+    if (window.facecast) window.facecast.openNoteEditor(UTF8ToString(text), color);
+  },
+
+  FC_CloseNoteEditor: function () {
+    if (window.facecast) window.facecast.closeNoteEditor();
+  },
+
+  FC_ReportNotes: function (json) {
+    if (window.facecast) window.facecast.reportNotes(UTF8ToString(json));
   },
 
   FC_DeleteVideoTexture: function (id) {

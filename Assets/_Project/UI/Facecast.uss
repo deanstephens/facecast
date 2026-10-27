@@ -79,3 +79,116 @@
     font-size: 18px;
     white-space: nowrap;
 }
+
+/* What a click would do: under the crosshair. */
+.fc-prompt {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    translate: -50% 26px;
+    padding: 5px 14px 6px 14px;
+    border-radius: 14px;
+    background-color: rgba(18, 24, 44, 0.66);
+    font-size: 18px;
+    white-space: nowrap;
+}
+
+/* The note to write on, when there's no page around the game (the Editor, desktop builds). */
+.fc-editor {
+    position: absolute;
+    left: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    align-items: center;
+    justify-content: center;
+    background-color: rgba(18, 24, 44, 0.35);
+}
+
+.fc-editor-card {
+    width: 400px;
+    align-items: center;
+}
+
+.fc-note {
+    width: 380px;
+    height: 380px;
+    padding: 28px 26px 22px 26px;
+    rotate: -1.5deg;
+    border-bottom-width: 6px;
+    border-bottom-color: rgba(0, 0, 0, 0.12);
+}
+
+.fc-note-text {
+    flex-grow: 1;
+    margin: 0;
+    font-size: 36px;
+    color: rgb(38, 48, 90);
+    -unity-text-align: middle-center;
+    white-space: normal;
+}
+
+.fc-note-text > .unity-text-field__input {
+    flex-grow: 1;
+    background-color: rgba(0, 0, 0, 0);
+    border-width: 0;
+    padding: 0;
+    -unity-text-align: middle-center;
+    white-space: normal;
+}
+
+.fc-note-count {
+    position: absolute;
+    right: 14px;
+    bottom: 8px;
+    font-size: 15px;
+    color: rgba(38, 48, 90, 0.55);
+}
+
+.fc-note-swatches {
+    flex-direction: row;
+    margin-top: 18px;
+}
+
+.fc-note-swatch {
+    width: 34px;
+    height: 34px;
+    margin: 0 6px 0 6px;
+    border-radius: 7px;
+    border-width: 3px;
+    border-color: rgb(255, 255, 255);
+}
+
+.fc-note-swatch--on {
+    border-color: rgb(29, 36, 64);
+}
+
+.fc-note-actions {
+    flex-direction: row;
+    margin-top: 16px;
+}
+
+.fc-button {
+    margin: 0 6px 0 6px;
+    padding: 9px 22px 10px 22px;
+    border-radius: 16px;
+    border-width: 0;
+    background-color: rgba(18, 24, 44, 0.74);
+    color: rgb(255, 250, 240);
+    font-size: 19px;
+}
+
+.fc-button:hover {
+    background-color: rgba(28, 36, 64, 0.92);
+}
+
+.fc-button--primary {
+    background-color: rgb(29, 36, 64);
+}
+
+.fc-note-tip {
+    margin-top: 12px;
+    font-size: 15px;
+    color: rgb(255, 250, 240);
+    -unity-text-align: middle-center;
+}

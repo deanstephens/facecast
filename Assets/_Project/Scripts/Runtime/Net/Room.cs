@@ -41,11 +41,14 @@ namespace Facecast
             {
                 case "self":
                     App.Instance?.OnJoined(e);
+                    Noticeboards.Instance?.OnJoined(e);
                     break;
                 case "hello" when !string.IsNullOrEmpty(e.id):
                     bool known = _avatars.ContainsKey(e.id);
                     Get(e.id, true).Apply(e);
-                    if (!known) Debug.Log($"[Room] {e.name} ({e.id}) is here: camera {(e.cam ? "on" : "off")}, microphone {(e.mic ? "on" : "off")}");
+                    if (known) break;
+                    Debug.Log($"[Room] {e.name} ({e.id}) is here: camera {(e.cam ? "on" : "off")}, microphone {(e.mic ? "on" : "off")}");
+                    Noticeboards.Instance?.PeerArrived(e.id);
                     break;
                 case "pose" when e.id != null && _avatars.TryGetValue(e.id, out var avatar):
                     if (AvatarPose.TryFromWire(e.p, out var pose, out float sent))
@@ -53,6 +56,13 @@ namespace Facecast
                     break;
                 case "leave" when e.id != null:
                     Remove(e.id);
+                    Noticeboards.Instance?.PeerLeft(e.id);
+                    break;
+                case "notes":
+                    Noticeboards.Instance?.Receive(e.notes, e.id);
+                    break;
+                case "write":
+                    NoteHand.Instance?.OnWritten(e.ok, e.text ?? "", e.tint);
                     break;
             }
         }
@@ -85,7 +95,8 @@ namespace Facecast
 
         /// <summary>
         /// Test hooks the page can call (<c>facecast.debug.unity("…")</c> in the browser console):
-        /// <c>teleport x z yaw [pitch]</c> moves you; <c>bots n</c> adds demo bots.
+        /// <c>teleport x z yaw [pitch]</c> moves you; <c>bots n</c> adds demo bots; <c>note …</c> handles sticky notes
+        /// (<see cref="NoteHand.DebugCommand"/>).
         /// </summary>
         public void OnDebugCommand(string command)
         {
@@ -99,6 +110,9 @@ namespace Facecast
                     break;
                 case "bots" when app:
                     app.Bots.Spawn(Mathf.Clamp((int)F(1), 1, 8), this);
+                    break;
+                case "note" when NoteHand.Instance:
+                    NoteHand.Instance.DebugCommand(w);
                     break;
                 default:
                     Debug.LogWarning("[Room] Unknown debug command: " + command);

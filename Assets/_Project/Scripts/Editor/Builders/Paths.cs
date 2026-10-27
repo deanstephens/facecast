@@ -17,5 +17,6 @@ namespace Facecast.EditorTools
         public const string VolumeProfilePath = SettingsDir + "/PostProcessing.asset";
         public const string GameScene = ScenesDir + "/Plaza.unity";
         public const string AvatarPrefab = PrefabsDir + "/Avatar.prefab";
+        public const string NoteFontPath = FontAssetsDir + "/PatrickHand-Regular-SDF.asset";
     }
 }

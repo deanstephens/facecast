@@ -2,7 +2,8 @@
 
 Walk around a sunny town square with friends, in first person. Everyone is a small hovering robot whose face is a
 screen, and **your webcam is your face**: whoever walks up to you sees you on it, and hears you, louder the closer
-they stand.
+they stand. Four noticeboards stand round the square: take a sticky note from one, write on it and stick it anywhere
+on any board for everyone to read.
 
 It's a static web page: Unity for the world, Blender for every model, and WebRTC between the browsers for video,
 voice and movement. Put it on GitHub Pages (or any static host), send a friend the room's link, and you meet. There
@@ -28,6 +29,11 @@ with the link can join, so pick a room name nobody will guess for a private chat
 | Walk | W A S D or the arrow keys |
 | Run | Shift |
 | Jump | Space |
+| Take a sticky note | Look at a noticeboard's notepads (the shelf under the cork) and click |
+| Stick it on a board | Look where it should go on any board's cork and click |
+| Move a note | Click it to pick it up, then click where it should go |
+| Write on the note you're holding | E |
+| Throw it away | X (or Delete) |
 | Microphone on/off | M, or the microphone button |
 | Camera on/off | V, or the camera button |
 | Leave | The door button |
@@ -35,6 +41,17 @@ with the link can join, so pick a room name nobody will guess for a private chat
 Your own camera shows in the corner, mirrored like a mirror; everyone else sees you the right way round. Names float
 over everyone's heads and light up, along with their antenna and ear lights and the rim of their screen, while they
 speak. Use headphones: other people's voices coming out of speakers get back into your microphone.
+
+**Noticeboards.** Four boards stand between the paths, titled *Notices*, *Ideas*, *Questions* and *Thank you!*. Each
+has a shelf of yellow, pink, blue and green notepads. Click one and a note opens to write on (up to 140 characters;
+you can change its colour); press Done (Ctrl+Enter, ⌘ Enter on a Mac) and it's in your hand. Point at any board and the
+note shows where it will go; click to stick it there. Anyone can pick up any note to move it, write on it again or
+throw it away, and everyone sees it in their hand while they carry it. Handwriting is drawn as large as the note
+allows, signed with the writer's name. A board holds 40 notes.
+
+The boards belong to the room: everyone in it sees the same notes, and someone arriving gets them from the people
+already there. Your browser also keeps each room's notes, so a room you come back to still has them even if you're
+first in (and brings them to the others). An empty room has a single note explaining how it works.
 
 **Demo bots.** `?bots=3` in the address (before the `#room`) adds up to eight strollers who chat with each other and
 turn to face you. Only you see them, and they wear your own camera, which makes a quick check that your picture comes
@@ -63,9 +80,10 @@ holds settings you can edit on the deployed site:
   address overrides it.
 - `relayUrls`: your own Nostr relays or MQTT brokers instead of the public ones.
 
-**Privacy.** Video, voice and movement go straight between the browsers in a room, encrypted (WebRTC). To find each
-other, browsers post connection offers (encrypted with a key derived from the room name) to public relays, so pick
-room names nobody will guess. Nothing is stored anywhere.
+**Privacy.** Video, voice, movement and notes go straight between the browsers in a room, encrypted (WebRTC). To find
+each other, browsers post connection offers (encrypted with a key derived from the room name) to public relays, so
+pick room names nobody will guess. Nothing is stored on any server; each browser keeps the sticky notes of the rooms
+it has been in.
 
 **Limits.** Everyone connects to everyone, so each person sends their camera to every other person. That's fine for
 a handful of people; past about eight, upload bandwidth and decoding start to tell. Walking needs a keyboard and
@@ -82,9 +100,11 @@ join both. Both share your one camera.
 
 **End-to-end test.** `cd Tools/web && npm install && npm run e2e` starts the server, opens two Chrome instances with
 fake cameras and microphones (a moving test pattern and a beep) in a fresh room over the real relays, has one go through
-the join card (typing her name, picking a colour) and the other join from the address, stands them face to face, and
-checks that each sees the other's camera on their face screen and hears them. Screenshots of the card and both views
-go to `Screenshots/web_*.png`. `npm run e2e -- --headed` shows the windows; `npm run e2e -- --url
+the join card (typing her name, picking a colour, pressing Enter) and the other join from the address, stands them
+face to face, and checks that each sees the other's camera on their face screen and hears them. Then she takes a note
+from a noticeboard, types on it in the page's editor, makes it green and sticks it on the board; he must see it arrive
+and moves it; she must see it move; and a third browser joining afterwards must find it where he put it. Screenshots
+of the card, both views, the note editor and the board go to `Screenshots/web_*.png`. `npm run e2e -- --headed` shows the windows; `npm run e2e -- --url
 https://you.github.io/facecast/` tests the deployed site.
 
 ## How it works
@@ -95,7 +115,7 @@ The page (`Assets/WebGLTemplates/Facecast/`) and the Unity build split the work:
   the WebRTC room with Trystero. Every browser connects to every other one, sends its camera and microphone as media
   streams, and sends two small messages over a data channel: `hello` (name, colour, camera and microphone on or off)
   and `pose` (where its avatar stands and looks: six floats, 15 times a second, stamped with the sender's clock). It
-  forwards both to the game (`SendMessage("Room", "OnNetEvent", json)`). Voices play through each peer's `<video>`
+  forwards them to the game (`SendMessage("Room", "OnNetEvent", json)`), along with `notes` (below). Voices play through each peer's `<video>`
   element (so the browser's echo cancellation applies), with the volume set by distance.
 - **The game** (`Scripts/Runtime`) is the world. `Room` turns messages into avatars. `RemoteAvatar` plays each peer's
   poses back 150 ms behind the newest, against the sender's clock (`PoseBuffer`), so movement stays smooth however
@@ -107,40 +127,60 @@ The page (`Assets/WebGLTemplates/Facecast/`) and the Unity build split the work:
   new frame. Pictures never pass through C#. The `Facecast/Face` shader crops the picture to fill the 4:3 screen
   (`VideoCrop.AspectFill`), adds a glass sheen and the speaking rim, and fades to the cartoon face when there's no
   video.
+- **Notes.** The game keeps every note in the room in a `NoteBook`: where it's stuck, what it says, who's carrying it.
+  Every change (stuck, picked up, rewritten, thrown away) gets a version number (a Lamport clock, with the changer's
+  peer id to break ties) and goes to everyone in a `notes` message; each browser keeps the newest version of each note,
+  so all boards agree without a server, whatever order messages arrive in. Thrown-away notes are remembered, so an old
+  copy can't bring them back. A newcomer's first `hello` makes everyone send them all their notes; if two people grab
+  the same note at once, the same tie-break picks one and the other lets go. The page only carries the messages and
+  shows the note you write on (its `<textarea>`, with your browser's own editing, spelling and input methods); outside
+  a browser the overlay has its own. Handwriting is geometry: `NoteInk` lays the words out in Patrick Hand (wrapped,
+  at the biggest size that fits) and builds glyph quads from the font's signed-distance-field atlas, which the
+  `Facecast/Ink` shader draws crisply at any distance and lights like the paper. Each browser saves the room's notes
+  (`PlayerPrefs`, which is IndexedDB in a browser).
 - **Keyboard.** The game listens to the keyboard on the whole page, so the page keeps key events aimed at its text
-  fields away from the game (a capture-phase listener installed before the game loads).
+  fields away from the game (a capture-phase listener installed before the game loads), and calls those fields' own key
+  handlers (Enter to join, Esc and Ctrl+Enter on a note) itself.
 
-Offline (in the Editor and desktop builds) there's no page and no network: you join at once, with three demo bots.
+Offline (in the Editor and desktop builds) there's no page and no network: you join at once, with three demo bots, and
+the noticeboards come with a few notes to read.
 
 ## Project layout
 
 ```
 Assets/_Project/
   Art/Models/        FBX exported from Blender (generated; rebuild from Blender/)
-  Art/Fonts/         Fira Sans (SIL OFL)
-  Materials/         generated: M_Avatar, M_Face, M_Scenery, M_Ground, M_Sky
-  Prefabs/           generated: one prefab per Blender model (Avatar has its AvatarRig; scenery has colliders)
+  Art/Fonts/         Fira Sans, Patrick Hand (both SIL OFL)
+  Materials/         generated: M_Avatar, M_Face, M_Scenery, M_Ground, M_Note, M_Ink, M_Sky
+  Prefabs/           generated: one prefab per Blender model (Avatar has its AvatarRig, NoticeBoard its Noticeboard,
+                     StickyNote its NoteView; scenery has colliders)
   Scenes/Plaza.unity generated: the only scene
   Scripts/Runtime/
     Core/            App (start-up, joining), LaunchOptions, Palette, ScreenshotTour
     Net/             Room (messages → avatars), NetEvent, WebBridge (calls into the page), DemoBots
     Avatars/         AvatarRig (procedural animation, colour, face screen), RemoteAvatar, AvatarPose + PoseBuffer,
                      VideoFeeds (external video textures) + VideoCrop
-    Player/          LocalPlayer (first-person movement and look, pose reporting, the pre-join orbit)
-    UI/              Overlay (UI Toolkit: names over heads, crosshair, hints)
+    Boards/          Noticeboards (the room's notes: syncing, saving, notes in others' hands), Noticeboard (one board:
+                     places on its cork, laying out its notes), Notes (NoteData, NoteBook), NoteInk (handwriting),
+                     NoteView, SampleNotes
+    Player/          LocalPlayer (first-person movement and look, pose reporting, the pre-join orbit), NoteHand (taking,
+                     writing, sticking, moving and throwing away notes)
+    UI/              Overlay (UI Toolkit: names over heads, crosshair and what a click would do, hints, the offline note
+                     editor)
   Scripts/Editor/    builders (assets, prefabs, scene, project settings, player builds), PlayFromStartScene
-  Shaders/           Flat (vertex colour, tint, speaking glow), Face (webcam screen and cartoon face)
+  Shaders/           Flat (vertex colour, tint, speaking glow), Face (webcam screen and cartoon face), Ink (handwriting)
   Plugins/WebGL/     Facecast.jslib (the game's side of the page bridge; video textures)
   UI/                Facecast.uss, theme, PanelSettings, font asset
-  Tests/             EditMode (pose playback, cropping, messages, options), PlayMode (the scene, peers, walking)
+  Tests/             EditMode (pose playback, cropping, messages, options, notes), PlayMode (the scene, peers, walking,
+                     noticeboards)
 Assets/WebGLTemplates/Facecast/
-  index.html         the page: join card, HUD (Unity fills in the build file names)
-  facecast.js        page logic: loading, join card, media, WebRTC room, voice, the bridge
-  facecast.css, icon.svg, config.js
+  index.html         the page: join card, HUD, the note you write on (Unity fills in the build file names)
+  facecast.js        page logic: loading, join card, media, WebRTC room, voice, notes, the bridge
+  facecast.css, icon.svg, config.js, fonts/ (Patrick Hand for the note editor)
   lib/               Trystero, bundled (generated by Tools/web/vendor.mjs)
 Blender/
   MODELS.md          the model catalogue: names, child objects, anchors and pivots Unity relies on
-  scripts/           common.py (mesh builder + export), models_avatar.py, models_plaza.py, build_all.py
+  scripts/           common.py (mesh builder + export), models_avatar.py, models_plaza.py, models_boards.py, build_all.py
   source/, previews/ .blend files and preview renders
 Tools/
   serve_web.py       serves the web build locally, like GitHub Pages
@@ -178,13 +218,19 @@ cd Tools/web && npm install && npm run e2e        # the web build, two browsers,
 ```
 
 EditMode tests cover pose playback (clock offsets, late and stale packets, extrapolation), video cropping, the page's
-messages and launch options. PlayMode tests load the scene offline: you and the demo bots, a peer arriving, moving
-and leaving through the same messages the page sends, names over heads, walking into the fountain and the outer wall,
-and walking with a simulated keyboard.
+messages and launch options, and notes: versions agreeing whatever order they arrive in, ties, thrown-away notes
+staying gone, cleaning notes from outside, fitting words on a note, stacking overlapping notes, the wire format.
+PlayMode tests load the scene offline: you and the demo bots, a peer arriving, moving and leaving through the same
+messages the page sends, names over heads, walking into the fountain and the outer wall, walking with a simulated
+keyboard; and the noticeboards: four boards facing the fountain with their titles written on, taking a note from the
+notepad you're looking at, writing on it, sticking it where you look, picking it up and throwing it away, the page's
+editor answering, a peer's notes arriving and moving, a peer carrying a note and leaving with it, two people grabbing
+the same note, a full board, and a newcomer being sent every note.
 
 **Screenshot tour.** A desktop build run with `-autocapture <dir>` photographs the square from above, then poses three
-demo bots in front of you and saves your first-person view, a close-up of a face screen and a wider shot with names,
-then quits:
+demo bots in front of you and saves your first-person view, a close-up of a face screen and a wider shot with names
+(one carrying a note); then it writes a note at a noticeboard, holds it, holds it up to the board and sticks it, and
+quits:
 
 ```bash
 Builds/StandaloneOSX/Facecast.app/Contents/MacOS/Facecast -autocapture "$PWD/Screenshots" -screen-width 1600 -screen-height 900 -screen-fullscreen 0

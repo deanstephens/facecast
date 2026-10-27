@@ -1,9 +1,11 @@
 // Facecast's page: loads the Unity build, runs the join card, owns your camera and microphone and the WebRTC room,
-// plays everyone's voice, and answers the game's calls (window.facecast; see Plugins/WebGL/Facecast.jslib).
+// plays everyone's voice, shows the sticky note you write on, and answers the game's calls (window.facecast; see
+// Plugins/WebGL/Facecast.jslib).
 //
 // Networking is peer to peer: every browser in a room connects to every other one (WebRTC), sending its camera and
-// microphone as media streams and two small messages over a data channel: "hello" (name, colour, camera and
-// microphone on/off) and "pose" (where its avatar stands and looks, 15 times a second). Browsers find each other
+// microphone as media streams and small messages over a data channel: "hello" (name, colour, camera and microphone
+// on/off), "pose" (where its avatar stands and looks, 15 times a second) and "notes" (sticky notes on the
+// noticeboards: the game decides what's on them, the page just carries the messages). Browsers find each other
 // through Trystero, which swaps connection offers over public Nostr relays (or MQTT brokers), so the page needs no
 // server of its own and runs from any static host such as GitHub Pages.
 
@@ -15,6 +17,10 @@ const EYE_HEIGHT = 1.5
 const NAMES = ['Sunny Otter', 'Brave Finch', 'Quiet Fox', 'Lucky Newt', 'Merry Wren', 'Calm Heron', 'Bold Badger', 'Swift Hare']
 const ROOM_WORDS = ['mint', 'amber', 'coral', 'maple', 'olive', 'plum', 'sage', 'honey', 'cedar', 'pearl']
 const ROOM_PLACES = ['fountain', 'plaza', 'garden', 'square', 'bench', 'lantern', 'hedge', 'meadow']
+// The notepads on every noticeboard, in the game's order (Notes.Colors).
+const NOTE_COLORS = ['#FFE27A', '#FFA9C6', '#9DD7FF', '#B6EA98']
+const NOTE_NAMES = ['Yellow', 'Pink', 'Blue', 'Green']
+const NOTE_MAX = 140
 
 const $ = id => document.getElementById(id)
 const params = new URLSearchParams(location.search)
@@ -43,6 +49,11 @@ const unityQueue = []
 const uploads = {}
 let audioCtx = null
 let selfAnalyser = null
+let writing = false                 // the note to write on is open
+let noteColor = 0
+let notesReport = null              // what the game says is on the boards (for the tests)
+let notesReceived = 0
+const fieldKeys = new Map()         // text field -> its keydown handler (see the key filter at the bottom)
 
 // ------------------------------------------------------------------ the game's calls (Facecast.jslib)
 
@@ -70,6 +81,16 @@ window.facecast = {
     const peer = peers.get(key)
     return peer && peer.mic ? levelOf(peer.analyser, peer) : 0
   },
+  sendNotes(json, target) {
+    if (!actions) return
+    let data
+    try { data = JSON.parse(json) } catch { return }
+    if (!target) actions.notes.send(data).catch(() => {})
+    else if (peers.has(target)) actions.notes.send(data, {target}).catch(() => {})  // demo bots aren't peers
+  },
+  openNoteEditor(text, color) { openNoteEditor(text, color) },
+  closeNoteEditor() { closeNoteEditor() },
+  reportNotes(json) { try { notesReport = JSON.parse(json) } catch {} },
   // For the console and the end-to-end test (Tools/web/e2e.mjs).
   debug: {
     selfId: () => selfId,
@@ -83,6 +104,9 @@ window.facecast = {
       uploads: uploads[p.id] || 0,
     })),
     uploads: () => ({...uploads}),
+    notes: () => notesReport,
+    notesReceived: () => notesReceived,
+    writing: () => writing,
     unity: command => unity && unity.SendMessage('Room', 'OnDebugCommand', command),
   },
 }
@@ -160,7 +184,7 @@ function setupCard() {
   $('micToggle').onclick = () => setMic(!me.mic)
   $('previewOn').onclick = () => setCam(true)
   $('join').onclick = join
-  for (const id of ['name', 'room']) $(id).addEventListener('keydown', e => { if (e.key === 'Enter' && !$('join').disabled) join() })
+  for (const id of ['name', 'room']) fieldKeys.set($(id), e => { if (e.key === 'Enter' && !$('join').disabled) join() })
   reflectMedia()
 
   // Show the camera right away if the browser already allows it; otherwise wait for a click, so the
@@ -392,7 +416,8 @@ async function join() {
   selfId = trystero.selfId
   const helloAction = room.makeAction('hello')
   const poseAction = room.makeAction('pose')
-  actions = {hello: helloAction, pose: poseAction}
+  const notesAction = room.makeAction('notes')
+  actions = {hello: helloAction, pose: poseAction, notes: notesAction}
 
   room.onPeerJoin = id => {
     peer(id)
@@ -439,6 +464,12 @@ async function join() {
     setVolume(p)
     if (p.hello) toUnity({type: 'pose', id: peerId, p: p.pose})
   }
+  notesAction.onMessage = (data, {peerId}) => {
+    const notes = Array.isArray(data?.notes) ? data.notes.slice(0, 1000).map(cleanNote).filter(Boolean) : []
+    if (!notes.length) return
+    notesReceived += notes.length
+    toUnity({type: 'notes', id: peerId, notes})
+  }
 
   if (local.getTracks().length) {
     room.addStream(local)
@@ -456,6 +487,79 @@ function attachStream(p, stream) {
   play(p.video)
   if (!p.analyser && stream.getAudioTracks().length) p.analyser = analyse(stream)
   setVolume(p)
+}
+
+// A note from another browser, with the types the game expects (the game checks the values).
+function cleanNote(n) {
+  if (!n || typeof n !== 'object' || typeof n.id !== 'string') return null
+  const num = (v, d = 0) => typeof v === 'number' && isFinite(v) ? v : d
+  const str = (v, max) => typeof v === 'string' ? v.slice(0, max) : ''
+  return {
+    id: n.id.slice(0, 64), board: num(n.board, -1) | 0, x: num(n.x, 0.5), y: num(n.y, 0.5), tilt: num(n.tilt),
+    color: num(n.color) | 0, text: str(n.text, 400), by: str(n.by, 48), holder: str(n.holder, 64), gone: n.gone === true,
+    v: num(n.v) | 0, w: str(n.w, 64),
+  }
+}
+
+// ------------------------------------------------------------------ the note you write on
+
+function setupNoteEditor() {
+  NOTE_COLORS.forEach((color, i) => {
+    const b = document.createElement('button')
+    b.type = 'button'
+    b.style.background = color
+    b.setAttribute('role', 'radio')
+    b.setAttribute('aria-label', NOTE_NAMES[i])
+    b.onclick = () => pickNoteColor(i)
+    $('noteColors').appendChild(b)
+  })
+  $('noteText').maxLength = NOTE_MAX
+  $('noteText').addEventListener('input', countNote)
+  fieldKeys.set($('noteText'), e => {
+    if (e.key === 'Escape') {
+      e.preventDefault()
+      finishNote(false)
+    } else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault()
+      finishNote(true)
+    }
+  })
+  $('noteCancel').onclick = () => finishNote(false)
+  $('noteDone').onclick = () => finishNote(true)
+  if (/Mac|iPhone|iPad/.test(navigator.platform)) $('noteTip').textContent = '⌘ Enter: done · Esc: cancel · then click a board to stick it'
+}
+
+function pickNoteColor(i) {
+  noteColor = Math.max(0, Math.min(NOTE_COLORS.length - 1, i | 0))
+  $('notePaper').style.setProperty('--note', NOTE_COLORS[noteColor])
+  for (const [k, b] of [...$('noteColors').children].entries()) b.setAttribute('aria-checked', String(k === noteColor))
+}
+
+function countNote() {
+  $('noteCount').textContent = `${$('noteText').value.length} / ${NOTE_MAX}`
+}
+
+function openNoteEditor(text, color) {
+  writing = true
+  if (document.pointerLockElement) document.exitPointerLock()
+  $('noteText').value = text || ''
+  pickNoteColor(color)
+  countNote()
+  $('noteEditor').hidden = false
+  setTimeout(() => $('noteText').focus(), 0)
+}
+
+function closeNoteEditor() {
+  writing = false
+  $('noteEditor').hidden = true
+}
+
+// Done or Cancel: the game hears which, and what's written.
+function finishNote(ok) {
+  if (!writing) return
+  closeNoteEditor()
+  toUnity(ok ? {type: 'write', ok: true, text: $('noteText').value.slice(0, NOTE_MAX), tint: noteColor} : {type: 'write', ok: false})
+  canvas.focus()
 }
 
 // ------------------------------------------------------------------ the HUD
@@ -514,17 +618,22 @@ function toast(message, bad = false) {
 
 // ------------------------------------------------------------------ start
 
-// The game listens to the keyboard on the whole page, which would swallow typing in the name and room fields.
+// The game listens to the keyboard on the whole page, which would swallow typing in the name, room and note fields.
 // This listener goes in first (capture phase, before the game loads) and keeps keys aimed at a text field away from
-// the game's handlers; the field still gets them, since nothing cancels their default action.
+// the game's handlers; the field still gets them, since nothing cancels their default action. Stopping the event here
+// also keeps it from the field's own listeners, so a field's key handling (Enter to join, Esc on a note) is called
+// from here instead.
 for (const type of ['keydown', 'keyup', 'keypress']) {
   window.addEventListener(type, e => {
     const t = e.target
-    if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) e.stopImmediatePropagation()
+    if (!t || !(t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return
+    if (type === 'keydown') fieldKeys.get(t)?.(e)
+    e.stopImmediatePropagation()
   }, true)
 }
 canvas.addEventListener('pointerdown', () => canvas.focus())
 canvas.addEventListener('contextmenu', e => e.preventDefault())
 window.addEventListener('pagehide', () => { if (room) room.leave() })
 setupCard()
+setupNoteEditor()
 loadUnity()

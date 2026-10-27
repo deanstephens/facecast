@@ -11,14 +11,18 @@ namespace Facecast.EditorTools
 {
     /// <summary>
     /// Builds Plaza.unity, the only scene: the town square (fountain, ring of benches, lamps flanking the four paths,
-    /// planters, a hedge ring with trees and hills beyond, an invisible wall out on the lawn), a golden-hour sun and
-    /// sky, and the systems: App, Room, the player and camera, and the overlay.
+    /// four noticeboards between them with planters either side, a hedge ring with trees and hills beyond, an
+    /// invisible wall out on the lawn), a golden-hour sun and sky, and the systems: App, Room, the noticeboards, the
+    /// player and camera, and the overlay.
     /// </summary>
     public static class SceneBuilder
     {
         /// <summary>Where you can walk: out onto the lawn, short of the outer trees.</summary>
         public const float BoundaryRadius = 30f;
         const float HedgeRadius = 15.8f;
+        const float BoardRadius = 12.1f;
+        /// <summary>The boards' roofs and title frames: coral, sky, mint, violet.</summary>
+        static readonly Color[] BoardColors = { Palette.Colors[1], Palette.Colors[0], Palette.Colors[3], Palette.Colors[4] };
         static readonly float[] PathAngles = { 0f, 90f, 180f, 270f };
 
         [MenuItem("Facecast/Build/Build Everything", priority = 0)]
@@ -81,7 +85,7 @@ namespace Facecast.EditorTools
         public static void BuildScene()
         {
             var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
-            BuildWorld();
+            var boards = BuildWorld();
             BuildLighting();
 
             // Systems.
@@ -91,6 +95,11 @@ namespace Facecast.EditorTools
             var roomGo = new GameObject("Room");  // the page sends its messages to this name
             app.Room = roomGo.AddComponent<Room>();
             app.Room.AvatarPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(Paths.AvatarPrefab);
+            var notes = new GameObject("Noticeboards").AddComponent<Noticeboards>();
+            notes.Boards = boards;
+            notes.NotePrefab = Prefab("StickyNote");
+            notes.NoteFont = AssetDatabase.LoadAssetAtPath<UnityEngine.TextCore.Text.FontAsset>(Paths.NoteFontPath);
+            notes.InkMaterial = FacecastAssets.Mat("M_Ink");
 
             // You: a character controller the size of an avatar, and the camera (which circles the square until you join).
             var playerGo = new GameObject("Player");
@@ -106,6 +115,7 @@ namespace Facecast.EditorTools
             var player = playerGo.AddComponent<LocalPlayer>();
             player.AvatarPrefab = app.Room.AvatarPrefab;
             app.Player = player;
+            playerGo.AddComponent<NoteHand>();
 
             var camGo = new GameObject("Main Camera") { tag = "MainCamera" };
             var cam = camGo.AddComponent<Camera>();
@@ -136,7 +146,7 @@ namespace Facecast.EditorTools
             Debug.Log("[SceneBuilder] Saved " + Paths.GameScene);
         }
 
-        static void BuildWorld()
+        static Noticeboard[] BuildWorld()
         {
             var world = new GameObject("World").transform;
             Place("PlazaGround", world, Vector3.zero, 0f);
@@ -153,10 +163,24 @@ namespace Facecast.EditorTools
             foreach (var a in PathAngles)
                 foreach (var side in new[] { -7.5f, 7.5f })
                     Place("Lamp", world, Polar(12.2f, a + side), 0f);
-            for (int i = 0; i < 4; i++)
+            // A noticeboard between each pair of paths, facing the fountain, with a planter either side.
+            var boards = new Noticeboard[Notes.BoardCount];
+            for (int i = 0; i < boards.Length; i++)
             {
-                var p = Polar(11.7f, 45f + 90f * i);
-                Place("Planter", world, p, FacingCentre(p));
+                float a = 45f + 90f * i;
+                var p = Polar(BoardRadius, a);
+                var board = Place("NoticeBoard", world, p, FacingCentre(p)).GetComponent<Noticeboard>();
+                board.Index = i;
+                board.Title = SampleNotes.Titles[i];
+                board.Accent = BoardColors[i];
+                board.name = "Noticeboard " + board.Title;
+                PrefabUtility.RecordPrefabInstancePropertyModifications(board);
+                boards[i] = board;
+                foreach (var side in new[] { -11.5f, 11.5f })
+                {
+                    var q = Polar(11.9f, a + side);
+                    Place("Planter", world, q, FacingCentre(q));
+                }
             }
 
             // The hedge ring, open where the paths run out to the lawn.
@@ -203,6 +227,7 @@ namespace Facecast.EditorTools
                 var box = seg.gameObject.AddComponent<BoxCollider>();
                 box.size = new Vector3(2f * Mathf.PI * BoundaryRadius / segments + 0.6f, 6f, 0.5f);
             }
+            return boards;
         }
 
         static void BuildLighting()
