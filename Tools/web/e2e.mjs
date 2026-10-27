@@ -5,7 +5,7 @@
 // zoom must find the face, zoom in on it and send the crop to the other. Then one writes a sticky note in the page's
 // editor and sticks it on a noticeboard, and the other sees it and moves it; she posts a question in the question box,
 // and he pulls it out and lays it on the table. He shares his screen (Chrome's fake screen): a projection goes up in
-// front of him, and she must get its place and its picture. A third browser arriving later must find the note where
+// front of him, and she must get its place and its picture; he makes it large, and hers must grow too. A third browser arriving later must find the note where
 // it was moved to, the question on the table and his projection; when he stops sharing it comes down for everyone.
 // Screenshots land in Screenshots/web_*.png.
 //
@@ -289,8 +289,17 @@ try {
     window.facecast.debug.shares().peers.find(p => p.on && p.uploads > 0) || null), 30)
   log(`Ana sees Ben's screen (${screen.video}, ${screen.uploads} frames on the projection)`)
   if (screen.at.some((v, i) => Math.abs(v - shared.at[i]) > 0.01)) failures.push(`Ana has Ben's projection at ${screen.at}, not ${shared.at}`)
+  if (screen.size !== 2.4 || shared.size !== 2.4) failures.push(`Ben's projection didn't start medium: ${shared.size}, ${screen.size}`)
+  // He makes it large (the size buttons show while he shares): it must grow for her too.
+  if (await b.page.evaluate(() => document.getElementById('shareSizes').hidden)) failures.push("Ben's size buttons aren't showing")
+  await b.page.click('[aria-label="Large screen"]')
+  await until("Ana to see Ben's projection grow large", () => a.page.evaluate(() =>
+    window.facecast.debug.shares().peers.some(p => p.on && p.size === 3.6)), 10)
+  log("Ben made his projection large; Ana's grew too")
+  await sleep(600)
+  await b.page.screenshot({path: path.join(shots, 'web_share_sizes.png')})
   await a.page.evaluate(([x, z]) => {
-    const ax = x + 1.4, az = z - 3.4
+    const ax = x - 0.8, az = z - 6
     const yaw = Math.atan2(x - ax, z - az) * 180 / Math.PI
     window.facecast.debug.unity(`teleport ${ax} ${az} ${(yaw + 360) % 360} 2`)
   }, [sx, sz])

@@ -27,8 +27,8 @@ namespace Facecast.Tests
         /// <summary>How far apart two places are across the ground (a player's feet settle a few centimetres when they land).</summary>
         static float Across(Vector3 a, Vector3 b) => Vector2.Distance(new Vector2(a.x, a.z), new Vector2(b.x, b.z));
 
-        static string Share(string id, bool on, Vector3 at, float yaw) =>
-            $"{{\"type\":\"share\",\"id\":\"{id}\",\"on\":{(on ? "true" : "false")},\"p\":[{at.x},{at.y},{at.z},{yaw}]}}";
+        static string Share(string id, bool on, Vector3 at, float yaw, float size = 2.4f) =>
+            $"{{\"type\":\"share\",\"id\":\"{id}\",\"on\":{(on ? "true" : "false")},\"p\":[{at.x},{at.y},{at.z},{yaw}],\"size\":{size.ToString(System.Globalization.CultureInfo.InvariantCulture)}}}";
 
         [UnityTest]
         public IEnumerator YourScreenGoesUpInFrontOfYouFacingYouAndStaysPut()
@@ -119,6 +119,40 @@ namespace Facecast.Tests
         }
 
         [UnityTest]
+        public IEnumerator TheSharerPicksTheSizeAndItGrowsWhereItStands()
+        {
+            yield return Load();
+            var player = _app.Player;
+            player.Teleport(new AvatarPose(new Vector3(0f, 0f, -11f), 0f, 0f));
+            yield return null;
+            // Large: 3.6 m wide, half as big again as medium, and half as far again in front of you.
+            _app.Room.OnNetEvent("{\"type\":\"sharing\",\"on\":true,\"size\":3.6}");
+            var mine = _projections.Get(Projections.Self);
+            Assert.That(mine.Width, Is.EqualTo(3.6f).Within(1e-4f));
+            Assert.That(mine.transform.localScale.x, Is.EqualTo(1.5f).Within(1e-4f));
+            Assert.That(Across(mine.transform.position, new Vector3(0f, 0f, -6.8f)), Is.LessThan(0.01f), "4.2 m ahead");
+
+            // Huge, while it's up: it grows where it stands.
+            var at = mine.transform.position;
+            _app.Room.OnNetEvent("{\"type\":\"shareSize\",\"size\":5}");
+            Assert.That(_projections.Get(Projections.Self), Is.EqualTo(mine), "the same projection");
+            yield return new WaitForSeconds(1f);
+            Assert.That(mine.transform.localScale.x, Is.EqualTo(5f / 2.4f).Within(1e-3f));
+            Assert.That(mine.transform.position, Is.EqualTo(at), "where it stood");
+
+            // A peer's: small from the start, then resized by their next message.
+            var theirs = new Vector3(8f, 0f, 3f);
+            _app.Room.OnNetEvent(Share("peer-1", true, theirs, 90f, 1.6f));
+            var p = _projections.Get("peer-1");
+            Assert.That(p.transform.localScale.x, Is.EqualTo(1.6f / 2.4f).Within(1e-3f));
+            _app.Room.OnNetEvent(Share("peer-1", true, theirs, 90f, 99f));
+            Assert.That(_projections.Get("peer-1"), Is.EqualTo(p));
+            Assert.That(p.Width, Is.EqualTo(Projections.MaxWidth), "no bigger than the biggest");
+            _app.Room.OnNetEvent("{\"type\":\"share\",\"id\":\"peer-1\",\"on\":true,\"p\":[8,0,3,90]}");
+            Assert.That(p.Width, Is.EqualTo(Projections.DefaultWidth), "an older page, sending no size: medium");
+        }
+
+        [UnityTest]
         public IEnumerator APictureIsShownWholeAndOfflinePIsADemo()
         {
             yield return Load();
@@ -138,6 +172,13 @@ namespace Facecast.Tests
             Assert.That(fit.x, Is.EqualTo(0.75f).Within(0.01f));
             Assert.That(fit.y, Is.EqualTo(1f).Within(1e-4f));
             Assert.That(fit.z, Is.EqualTo(0.125f).Within(0.01f));
+
+            // [ and ]: the demo's size.
+            _projections.StepDemoSize(1);
+            Assert.That(demo.Width, Is.EqualTo(3.6f).Within(1e-4f));
+            _projections.StepDemoSize(-1);
+            _projections.StepDemoSize(-1);
+            Assert.That(demo.Width, Is.EqualTo(1.6f).Within(1e-4f));
 
             _projections.ToggleDemo();
             Assert.That(_projections.Sharing, Is.False);

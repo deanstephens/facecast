@@ -44,6 +44,7 @@ with the link can join, so pick a room name nobody will guess for a private chat
 | Camera on/off | V, or the camera button |
 | Face zoom on/off | Z, or the face button |
 | Share your screen (or stop) | P, or the screen button |
+| Your projection smaller / bigger | [ and ], or the S M L XL buttons while you share |
 | Leave | The door button |
 
 **Face zoom.** Your browser finds your face in your camera picture and zooms in on it, following you smoothly as you
@@ -80,11 +81,14 @@ single card explaining how they work.
 unrolls on the ground a couple of metres in front of where you're standing, facing you, in your colour with your name
 on its case, and everyone in the room sees your screen on it. It stays where it went up, however you move, until you
 stop sharing (the button or P again, or your browser's own "Stop sharing"), when it rolls back up. If something's in
-the way (the fountain, a bench, a hedge), it goes up closer. Your whole screen shows, with dark bars if its shape isn't
-16:9. If you share a tab's sound, it plays from the projection, louder the closer people stand. Several people can
-share at once, each on their own projection, and someone arriving later sees the ones already up. Phones can't share
-their screens, so the button only shows where the browser can. Offline (the Editor, desktop builds) there's no screen
-to share: P puts up a demo projection showing the square from above.
+the way (the fountain, a bench, a hedge), it goes up closer. Your whole screen shows, with dark bars if its shape
+isn't 16:9. Pick how big it is: small (1.6 m wide), medium (2.4 m), large (3.6 m) or huge (5 m), with the S M L XL
+buttons that appear above your controls while you share, or [ and ] in the square. It grows or shrinks where it
+stands, for everyone; a bigger one goes up further away to start with, so it fits in view. The page remembers your
+choice for next time. If you share a tab's sound, it plays from the projection, louder the closer people stand.
+Several people can share at once, each on their own projection, and someone arriving later sees the ones already up.
+Phones can't share their screens, so the button only shows where the browser can. Offline (the Editor, desktop builds)
+there's no screen to share: P puts up a demo projection showing the square from above, and [ and ] resize it.
 
 **Demo bots.** `?bots=3` in the address (before the `#room`) adds up to eight strollers who chat with each other and
 turn to face you. Only you see them, and they wear your own camera, which makes a quick check that your picture comes
@@ -112,6 +116,8 @@ holds settings you can edit on the deployed site:
 - `net`: `'nostr'` (default) or `'mqtt'`: which public network browsers use to find each other. `?net=mqtt` in the
   address overrides it.
 - `relayUrls`: your own Nostr relays or MQTT brokers instead of the public ones.
+- `screenSize`: how big a shared screen's projection starts, until someone picks another size: `'small'`, `'medium'`
+  (the default), `'large'` or `'huge'`. `?screen=large` in the address overrides it.
 
 **Privacy.** Video, voice, movement and notes go straight between the browsers in a room, encrypted (WebRTC). To find
 each other, browsers post connection offers (encrypted with a key derived from the room name) to public relays, so
@@ -142,11 +148,11 @@ on it in the page's editor, makes it green and sticks it on the board; he must s
 see it move. She writes a question on a card (the page's editor, as a card) and posts it in the question box; he must
 find it in his box, pulls it out and lays it on the table; she must see it there. He shares his screen (Chrome's fake
 screen) with the screen button: his projection must go up in front of him, and she must get its place and his screen's
-picture on it. A third browser joining afterwards must find the note where he put it, the question on the table and
-his projection with his screen; when he stops sharing, it must come down for both of them. Screenshots of the card,
-both views, the note and question editors, the board, the table and his projection go to `Screenshots/web_*.png`. `npm
-run e2e -- --headed` shows the windows; `npm run e2e -- --url https://you.github.io/facecast/` tests the deployed
-site.
+picture on it; he makes it large with the size buttons, and hers must grow too. A third browser joining afterwards
+must find the note where he put it, the question on the table and his projection with his screen; when he stops
+sharing, it must come down for both of them. Screenshots of the card, both views, the note and question editors, the
+board, the table, his size buttons and his projection go to `Screenshots/web_*.png`. `npm run e2e -- --headed` shows
+the windows; `npm run e2e -- --url https://you.github.io/facecast/` tests the deployed site.
 
 ## How it works
 
@@ -191,9 +197,10 @@ The page (`Assets/WebGLTemplates/Facecast/`) and the Unity build split the work:
   paper. Each browser saves the room's notes (`PlayerPrefs`, which is IndexedDB in a browser).
 - **Shared screens.** Sharing starts in the page (`getDisplayMedia`, its track hinted for sharp text). The page tells
   the game, which picks the spot (`Projections.PlaceInFront`: 2.8 m ahead, or 2.4, 2.0 or 1.6 m if the scenery is in
-  the way) and puts up a `Projection` there; the page then sends that spot and the screen to everyone. Every browser
-  shows the picture on the projection the way faces show cameras (`VideoFeeds`, key `screen:<peer>`), fitted whole by
-  the `Facecast/Screen` shader (`VideoCrop.AspectFit`).
+  the way, all times its size relative to medium) and puts up a `Projection` there; the page then sends that spot, its
+  size and the screen to everyone, and the size again whenever it changes (the projection scales about its feet).
+  Every browser shows the picture on the projection the way faces show cameras (`VideoFeeds`, key `screen:<peer>`),
+  fitted whole by the `Facecast/Screen` shader (`VideoCrop.AspectFit`).
 - **The mouse.** The browser decides when the game has the mouse: Esc lets it go without Unity's `Cursor.lockState`
   hearing of it. So in a browser the game asks the page every frame whether anything holds the pointer
   (`MouseLock`); while it's free, moving it doesn't turn your view, and a click on the game captures it again.
@@ -284,21 +291,23 @@ cd Tools/web && npm install && npm test          # the face zoom's arithmetic (N
 cd Tools/web && npm run e2e                       # the web build, three browsers, over the real network
 ```
 
-EditMode tests cover pose playback (clock offsets, late and stale packets, extrapolation), video cropping and fitting
-shared screens, the page's messages and launch options, and notes: versions agreeing whatever order they arrive in,
-ties, thrown-away notes staying gone, cleaning notes from outside, fitting words on a note, stacking overlapping
-notes, the wire format, where question cards may go. PlayMode tests load the scene offline: you and the demo bots, a
-peer arriving, moving and leaving through the same messages the page sends, names over heads, walking into the
-fountain and the outer wall, walking with a simulated keyboard; and the noticeboards: four boards facing the fountain
-with their titles written on, taking a note from the notepad you're looking at, writing on it, sticking it where you
-look, picking it up and throwing it away, the page's editor answering, a peer's notes arriving and moving, a peer
-carrying a note and leaving with it, two people grabbing the same note, a full board, and a newcomer being sent every
-note; and the question corner: the boards' titles, pointing at the tray, the box and the table, writing a question and
-posting it (and a sticky note refusing to go in), questions coming out oldest first and one at a time and lying face
-up on the table turned to you, a peer's questions arriving and coming back when they leave holding one, and a full
-table; and shared screens: yours going up in front of you facing you and staying put as you walk off, coming closer
-when the fountain is in the way, a peer's going up where they said with their name on it and coming down when they
-stop or leave, and offline P putting up the demo with a picture fitted whole.
+EditMode tests cover pose playback (clock offsets, late and stale packets, extrapolation), video cropping, fitting
+shared screens and stepping through their sizes, the page's messages and launch options, and notes: versions agreeing
+whatever order they arrive in, ties, thrown-away notes staying gone, cleaning notes from outside, fitting words on a
+note, stacking overlapping notes, the wire format, where question cards may go. PlayMode tests load the scene offline:
+you and the demo bots, a peer arriving, moving and leaving through the same messages the page sends, names over heads,
+walking into the fountain and the outer wall, walking with a simulated keyboard; and the noticeboards: four boards
+facing the fountain with their titles written on, taking a note from the notepad you're looking at, writing on it,
+sticking it where you look, picking it up and throwing it away, the page's editor answering, a peer's notes arriving
+and moving, a peer carrying a note and leaving with it, two people grabbing the same note, a full board, and a
+newcomer being sent every note; and the question corner: the boards' titles, pointing at the tray, the box and the
+table, writing a question and posting it (and a sticky note refusing to go in), questions coming out oldest first and
+one at a time and lying face up on the table turned to you, a peer's questions arriving and coming back when they
+leave holding one, and a full table; and shared screens: yours going up in front of you facing you and staying put as
+you walk off, coming closer when the fountain is in the way, a peer's going up where they said with their name on it
+and coming down when they stop or leave, the sharer's size choice (placed further away when bigger, growing where it
+stands, peers' sizes, and older pages sending none), and offline P putting up the demo with a picture fitted whole and
+[ ] resizing it.
 
 **Screenshot tour.** A desktop build run with `-autocapture <dir>` photographs the square from above, then poses three
 demo bots in front of you and saves your first-person view, a close-up of a face screen and a wider shot with names

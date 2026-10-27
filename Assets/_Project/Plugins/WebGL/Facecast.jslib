@@ -32,6 +32,10 @@ mergeInto(LibraryManager.library, {
     if (window.facecast) window.facecast.toggleShare();
   },
 
+  FC_ResizeShare: function (step) {
+    if (window.facecast) window.facecast.resizeShare(step);
+  },
+
   FC_ShareAt: function (x, y, z, yaw) {
     if (window.facecast) window.facecast.shareAt(x, y, z, yaw);
   },

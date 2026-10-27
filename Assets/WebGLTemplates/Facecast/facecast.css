@@ -277,6 +277,27 @@ svg { display: block; }
 .round svg { width: 22px; height: 22px; }
 .round:hover { background: rgba(28, 36, 64, 0.9); }
 .round[aria-pressed="false"] { background: rgba(229, 87, 74, 0.92); }
+/* While you share: your projection's size, S to XL. */
+.share-sizes {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 16px;
+  background: var(--glass);
+}
+.share-sizes button {
+  min-width: 38px;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--cream);
+  font-size: 14px;
+  font-weight: 700;
+}
+.share-sizes button:hover { background: rgba(255, 255, 255, 0.14); }
+.share-sizes button[aria-checked="true"] { background: color-mix(in srgb, var(--me) 80%, var(--ink)); }
+
 /* Sharing your screen is on when pressed, and off isn't a warning. */
 #hudShare[aria-pressed="false"] { background: var(--glass); }
 #hudShare[aria-pressed="true"] { background: color-mix(in srgb, var(--me) 80%, var(--ink)); }

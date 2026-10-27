@@ -16,6 +16,7 @@ namespace Facecast
         [DllImport("__Internal")] static extern void FC_ToggleCam();
         [DllImport("__Internal")] static extern void FC_ToggleZoom();
         [DllImport("__Internal")] static extern void FC_ToggleShare();
+        [DllImport("__Internal")] static extern void FC_ResizeShare(int step);
         [DllImport("__Internal")] static extern int FC_PointerLocked();
         [DllImport("__Internal")] static extern void FC_ShareAt(float x, float y, float z, float yaw);
         [DllImport("__Internal")] static extern int FC_VideoCrop(string key, float[] crop);
@@ -36,6 +37,8 @@ namespace Facecast
         public static void ToggleZoom() => FC_ToggleZoom();
         /// <summary>Starts sharing your screen (the browser asks which), or stops.</summary>
         public static void ToggleShare() => FC_ToggleShare();
+        /// <summary>The next size down (-1) or up (+1) for your projection: the page remembers it and tells everyone.</summary>
+        public static void ResizeShare(int step) => FC_ResizeShare(step);
         /// <summary>Whether the browser is holding the mouse pointer for the game (it lets go on Esc).</summary>
         public static bool PointerLocked() => FC_PointerLocked() != 0;
         /// <summary>Where your projection went up: the page tells everyone, and sends them your screen.</summary>
@@ -65,6 +68,7 @@ namespace Facecast
         public static void ToggleCam() { }
         public static void ToggleZoom() { }
         public static void ToggleShare() { }
+        public static void ResizeShare(int step) { }
         public static bool PointerLocked() => false;
         public static void ShareAt(float x, float y, float z, float yaw) { }
         public static bool VideoCrop(string key, float[] crop) => false;

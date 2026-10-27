@@ -5,11 +5,14 @@ namespace Facecast
     /// <summary>
     /// A projection screen showing someone's shared screen (the ProjectionScreen model; Blender/MODELS.md). It stands
     /// where it was put up, unrolls from its case, glows in the sharer's colour until their picture arrives, then shows
-    /// it fitted whole (Facecast/Screen), with their name on the case; when they stop, it rolls back up and goes.
+    /// it fitted whole (Facecast/Screen), with their name on the case; when they stop, it rolls back up and goes. The
+    /// sharer picks its size (<see cref="SetWidth"/>): the whole projector scales about its feet, smoothly.
     /// </summary>
     public sealed class Projection : MonoBehaviour
     {
         const float RollTime = 0.7f;
+        /// <summary>How quickly it grows or shrinks to a new size (per second).</summary>
+        const float ResizeRate = 6f;
 
         public Transform Screen, Rig, Plate;
         public Renderer ScreenRenderer, CaseRenderer;
@@ -23,7 +26,7 @@ namespace Facecast
         Material _screen, _case;
         Mesh _label;
         string _labelText;
-        float _roll, _video;
+        float _roll, _video, _scale = 1f, _targetScale = 1f;
         bool _closing;
         Texture _picture;
         Vector2Int _pictureSize;
@@ -37,8 +40,12 @@ namespace Facecast
         /// <summary>How far it has unrolled, 0..1.</summary>
         public float Unrolled => _roll;
         public bool Closing => _closing;
-        /// <summary>The screen's width and height in metres.</summary>
+        /// <summary>The model's screen's width and height in metres, before any resizing.</summary>
         public Vector2 ScreenSize { get; private set; } = new(2.4f, 1.35f);
+        /// <summary>The width its screen is (or is growing or shrinking to), in metres.</summary>
+        public float Width => ScreenSize.x * _targetScale;
+        /// <summary>How much bigger than the model it is (or is becoming).</summary>
+        public float Scale => _targetScale;
         public Material ScreenMaterial => _screen;
 
         /// <summary>Finds the model's parts by name (the prefab builder calls this so the references are saved).</summary>
@@ -81,13 +88,22 @@ namespace Facecast
             if (!string.IsNullOrEmpty(VideoKey)) VideoFeeds.Release(VideoKey);
         }
 
-        public void Init(string owner, string videoKey, string label, Color color)
+        public void Init(string owner, string videoKey, string label, Color color, float width)
         {
             Owner = owner;
             VideoKey = videoKey;
             name = "Projection " + owner;
             SetColor(color);
             SetLabel(label);
+            SetWidth(width, true);
+        }
+
+        /// <summary>Makes its screen <paramref name="width"/> metres wide (within the sizes on offer): at once, or growing to it.</summary>
+        public void SetWidth(float width, bool now = false)
+        {
+            _targetScale = Mathf.Clamp(width, Projections.MinWidth, Projections.MaxWidth) / ScreenSize.x;
+            if (now) _scale = _targetScale;
+            transform.localScale = Vector3.one * _scale;
         }
 
         public void SetColor(Color c)
@@ -126,6 +142,12 @@ namespace Facecast
             float dt = Time.deltaTime;
             _roll = Mathf.MoveTowards(_roll, _closing ? 0f : 1f, dt / RollTime);
             Roll(_roll);
+            if (!Mathf.Approximately(_scale, _targetScale))
+            {
+                _scale = Mathf.Lerp(_scale, _targetScale, 1f - Mathf.Exp(-ResizeRate * dt));
+                if (Mathf.Abs(_scale - _targetScale) < 0.002f) _scale = _targetScale;
+                transform.localScale = Vector3.one * _scale;
+            }
             if (_closing && _roll <= 0f)
             {
                 Destroy(gameObject);

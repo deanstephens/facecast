@@ -28,7 +28,7 @@ const NOTE_MAX = 140
 
 const $ = id => document.getElementById(id)
 const params = new URLSearchParams(location.search)
-const settings = {net: 'nostr', relayUrls: null, turn: [], ...(window.FACECAST_CONFIG || {})}
+const settings = {net: 'nostr', relayUrls: null, turn: [], screenSize: 'medium', ...(window.FACECAST_CONFIG || {})}
 if (params.get('net')) settings.net = params.get('net')
 
 const canvas = $('game')
@@ -36,7 +36,7 @@ const feeds = $('feeds')
 
 // ------------------------------------------------------------------ state
 
-const me = {name: '', color: COLORS[0], cam: true, mic: true, zoom: true}
+const me = {name: '', color: COLORS[0], cam: true, mic: true, zoom: true, screenSize: 'medium'}
 const local = new MediaStream()     // the tracks we send: at most one video and one audio
 let localShared = false             // added to the room yet (later tracks then go with addTrack)
 const selfVideo = makeVideo(true)   // your camera, for demo bots that wear it and for finding your face
@@ -61,6 +61,13 @@ let notesReport = null              // what the game says is on the boards (for 
 let notesReceived = 0
 let share = null                    // your shared screen: {stream, video, at: [x, y, z, yaw] once the game has put it up}
 const SHARE_VIDEO = {frameRate: {ideal: 15, max: 30}, width: {max: 1920}, height: {max: 1080}}
+// The sizes a shared screen's projection comes in, by the width of its screen in metres (the game's Projections.Widths).
+const SCREEN_SIZES = [
+  {id: 'small', label: 'S', name: 'Small', width: 1.6},
+  {id: 'medium', label: 'M', name: 'Medium', width: 2.4},
+  {id: 'large', label: 'L', name: 'Large', width: 3.6},
+  {id: 'huge', label: 'XL', name: 'Huge', width: 5},
+]
 const fieldKeys = new Map()         // text field -> its keydown handler (see the key filter at the bottom)
 
 // ------------------------------------------------------------------ the game's calls (Facecast.jslib)
@@ -79,6 +86,7 @@ window.facecast = {
   toggleCam() { setCam(!me.cam) },
   toggleZoom() { setZoom(!me.zoom) },
   toggleShare() { if (share) stopShare(); else startShare() },
+  resizeShare(step) { stepScreenSize(step) },
   // The game put up your projection here (x, y, z, yaw): now everyone gets it, and your screen.
   shareAt(x, y, z, yaw) {
     if (!share) return
@@ -135,9 +143,10 @@ window.facecast = {
     faceZoom: () => ({enabled: zoom.enabled, state: zoom.state, faces: zoom.faces, crop: zoom.crop}),
     // Your share, and everyone's: where their projection is, the picture's size and how many frames reached it.
     shares: () => ({
-      mine: share ? {at: share.at, video: `${share.video.videoWidth}x${share.video.videoHeight}`, uploads: uploads['screen:self'] || 0} : null,
+      mine: share ? {at: share.at, size: share.size, video: `${share.video.videoWidth}x${share.video.videoHeight}`,
+        uploads: uploads['screen:self'] || 0} : null,
       peers: [...peers.values()].filter(p => p.share).map(p => ({
-        id: p.id, on: p.share.on, at: p.share.at,
+        id: p.id, on: p.share.on, at: p.share.at, size: p.share.size,
         video: p.screenVideo ? `${p.screenVideo.videoWidth}x${p.screenVideo.videoHeight}` : '',
         uploads: uploads[`screen:${p.id}`] || 0,
       })),
@@ -203,6 +212,7 @@ function setupCard() {
   if (params.get('cam') === '0') me.cam = false
   if (params.get('mic') === '0') me.mic = false
   me.zoom = params.has('zoom') ? params.get('zoom') !== '0' : saved.zoom !== false
+  me.screenSize = [params.get('screen'), saved.screenSize, settings.screenSize].find(id => SCREEN_SIZES.some(s => s.id === id)) || 'medium'
   zoom.setEnabled(me.zoom)
 
   $('name').value = me.name
@@ -239,7 +249,9 @@ function setupCard() {
 }
 
 function savePrefs() {
-  try { localStorage.setItem('facecast', JSON.stringify({name: me.name, color: me.color, zoom: me.zoom})) } catch {}
+  try {
+    localStorage.setItem('facecast', JSON.stringify({name: me.name, color: me.color, zoom: me.zoom, screenSize: me.screenSize}))
+  } catch {}
 }
 
 function pickColor(color) {
@@ -482,9 +494,9 @@ async function startShare() {
   const video = makeVideo(true)
   video.srcObject = stream
   play(video)
-  share = {stream, video, at: null}
+  share = {stream, video, at: null, size: screenWidth()}
   reflectShare()
-  toUnity({type: 'sharing', on: true})                // the game puts it up and calls shareAt
+  toUnity({type: 'sharing', on: true, size: share.size})  // the game puts it up and calls shareAt
   toast('Sharing your screen: it shows on a screen in front of you, where you stood. P or the button stops.')
 }
 
@@ -504,12 +516,51 @@ function stopShare() {
 }
 
 function shareMessage() {
-  return share && share.at ? {on: true, at: share.at} : {on: false}
+  return share && share.at ? {on: true, at: share.at, size: share.size} : {on: false}
+}
+
+function screenWidth() {
+  return (SCREEN_SIZES.find(s => s.id === me.screenSize) || SCREEN_SIZES[1]).width
+}
+
+// Your projection's size: remembered for next time, and while you share it grows or shrinks for everyone.
+function setScreenSize(id) {
+  if (!SCREEN_SIZES.some(s => s.id === id)) return
+  me.screenSize = id
+  savePrefs()
+  reflectShare()
+  if (!share) return
+  share.size = screenWidth()
+  toUnity({type: 'shareSize', size: share.size})
+  if (share.at && actions) actions.share.send(shareMessage()).catch(() => {})
+}
+
+function stepScreenSize(step) {
+  const i = SCREEN_SIZES.findIndex(s => s.id === me.screenSize)
+  const next = SCREEN_SIZES[Math.max(0, Math.min(SCREEN_SIZES.length - 1, (i < 0 ? 1 : i) + Math.sign(step)))]
+  setScreenSize(next.id)
+  if (!share) toast(`Next time you share your screen, it goes up ${next.name.toLowerCase()} (${next.width} m wide)`)
+}
+
+function setupShareSizes() {
+  for (const size of SCREEN_SIZES) {
+    const b = document.createElement('button')
+    b.type = 'button'
+    b.textContent = size.label
+    b.dataset.size = size.id
+    b.title = `${size.name}: ${size.width} m wide ([ and ] in the square)`
+    b.setAttribute('role', 'radio')
+    b.setAttribute('aria-label', `${size.name} screen`)
+    b.onclick = () => setScreenSize(size.id)
+    $('shareSizes').appendChild(b)
+  }
 }
 
 function reflectShare() {
   $('hudShare').setAttribute('aria-pressed', String(!!share))
   $('hudShare').title = share ? 'Stop sharing your screen (P)' : 'Share your screen (P)'
+  $('shareSizes').hidden = !share
+  for (const b of $('shareSizes').children) b.setAttribute('aria-checked', String(b.dataset.size === me.screenSize))
 }
 
 // A peer's shared screen: its picture (and sound, if they shared a tab's sound) arrives as a second stream.
@@ -647,13 +698,15 @@ async function join() {
     const p = peer(peerId)
     const at = Array.isArray(data?.at) && data.at.length === 4 && data.at.every(Number.isFinite) ? data.at.map(Number) : null
     const on = data?.on === true && !!at
-    p.share = {on, at}
+    const size = Number.isFinite(data?.size) ? Math.max(1, Math.min(6, data.size)) : 2.4  // older pages: medium
+    const first = on && !p.share?.on
+    p.share = {on, at, size}
     if (!on) dropScreen(p)
     else {
       setVolume(p)
-      if (p.hello) toast(`${p.name} is sharing their screen`)
+      if (first && p.hello) toast(`${p.name} is sharing their screen`)
     }
-    toUnity({type: 'share', id: peerId, on, p: at || [0, 0, 0, 0]})
+    toUnity({type: 'share', id: peerId, on, p: at || [0, 0, 0, 0], size})
   }
   notesAction.onMessage = (data, {peerId}) => {
     const notes = Array.isArray(data?.notes) ? data.notes.slice(0, 1000).map(cleanNote).filter(Boolean) : []
@@ -842,5 +895,6 @@ canvas.addEventListener('contextmenu', e => e.preventDefault())
 window.addEventListener('pagehide', () => { if (room) room.leave() })
 setupCard()
 setupNoteEditor()
+setupShareSizes()
 requestAnimationFrame(followFace)
 loadUnity()

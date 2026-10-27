@@ -13,8 +13,9 @@ namespace Facecast
     /// <item><c>leave</c>: peer <see cref="id"/> left.</item>
     /// <item><c>notes</c>: peer <see cref="id"/> sent <see cref="notes"/> (changes, or every note when you arrive).</item>
     /// <item><c>write</c>: the page's note editor closed: <see cref="ok"/> with <see cref="text"/> in colour <see cref="tint"/>, or cancelled.</item>
-    /// <item><c>sharing</c>: you started sharing your screen (<see cref="on"/>), or stopped.</item>
-    /// <item><c>share</c>: peer <see cref="id"/> put up a projection of their screen at <see cref="p"/> (x, y, z, yaw), or took it down (<see cref="on"/> false).</item>
+    /// <item><c>sharing</c>: you started sharing your screen (<see cref="on"/>), its projection <see cref="size"/> metres wide; or stopped.</item>
+    /// <item><c>shareSize</c>: you picked another <see cref="size"/> for your projection while sharing.</item>
+    /// <item><c>share</c>: peer <see cref="id"/> put up a projection of their screen at <see cref="p"/> (x, y, z, yaw), <see cref="size"/> metres wide (or resized it), or took it down (<see cref="on"/> false).</item>
     /// </list>
     /// </summary>
     [Serializable]
@@ -33,6 +34,7 @@ namespace Facecast
         public int tint;
         public bool ok;
         public bool on;
+        public float size;
 
         public static NetEvent Parse(string json)
         {

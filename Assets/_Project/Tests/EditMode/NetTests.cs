@@ -98,6 +98,17 @@ namespace Facecast.Tests
         }
 
         [Test]
+        public void ProjectionsStepThroughTheirSizes()
+        {
+            Assert.That(Projections.Widths, Is.EqualTo(new[] { 1.6f, 2.4f, 3.6f, 5f }));
+            Assert.That(Projections.Step(2.4f, 1), Is.EqualTo(3.6f));
+            Assert.That(Projections.Step(2.4f, -1), Is.EqualTo(1.6f));
+            Assert.That(Projections.Step(5f, 1), Is.EqualTo(5f), "no bigger than huge");
+            Assert.That(Projections.Step(1.6f, -1), Is.EqualTo(1.6f), "no smaller than small");
+            Assert.That(Projections.Step(3.3f, 1), Is.EqualTo(5f), "from the nearest size (large)");
+        }
+
+        [Test]
         public void ASharedScreenIsFittedWholeWithBars()
         {
             float screen = 16f / 9f;

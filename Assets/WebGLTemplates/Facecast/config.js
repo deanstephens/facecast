@@ -9,4 +9,7 @@ window.FACECAST_CONFIG = {
   // Without one, those people can't see each other. Example (Cloudflare, Twilio, metered.ca or your own coturn):
   //   turn: [{urls: 'turn:turn.example.com:3478', username: 'user', credential: 'secret'}],
   turn: [],
+  // How big a shared screen's projection starts, until someone picks another size (the page remembers their choice):
+  // 'small' (1.6 m wide), 'medium' (2.4 m), 'large' (3.6 m) or 'huge' (5 m). ?screen=large in the address overrides it.
+  screenSize: 'medium',
 }

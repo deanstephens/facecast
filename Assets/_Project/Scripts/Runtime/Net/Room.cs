@@ -60,10 +60,13 @@ namespace Facecast
                     Projections.Instance?.PeerLeft(e.id);
                     break;
                 case "sharing":
-                    Projections.Instance?.OnSharing(e.on);
+                    Projections.Instance?.OnSharing(e.on, e.size);
+                    break;
+                case "shareSize":
+                    Projections.Instance?.OnShareSize(e.size);
                     break;
                 case "share":
-                    Projections.Instance?.OnShare(e.id, e.on, e.p);
+                    Projections.Instance?.OnShare(e.id, e.on, e.p, e.size);
                     break;
                 case "notes":
                     Noticeboards.Instance?.Receive(e.notes, e.id);
