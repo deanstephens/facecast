@@ -1,4 +1,6 @@
-// Settings for this copy of Facecast. Edit them on the server after deploying; no rebuild needed.
+// Settings for this copy of Facecast. Edit them on the server after deploying; no rebuild needed. Settings with
+// secrets in them (TURN credentials) are best kept in Tools/site/config.js, which Tools/deploy_pages.sh deploys in
+// this file's place and git ignores.
 window.FACECAST_CONFIG = {
   // How browsers find each other: 'nostr' (public Nostr relays, the default) or 'mqtt' (public MQTT brokers).
   // A page address with ?net=mqtt overrides this.

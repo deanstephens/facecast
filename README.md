@@ -114,7 +114,9 @@ holds settings you can edit on the deployed site:
   until there's a TURN server to relay their video through. `turn` is a fixed list of servers; `turnUrl` is a URL the
   page fetches fresh ones from each time someone joins (an array of ICE servers, or `{iceServers}`). Both can be set,
   and anything there is public, so use a TURN account meant for it. The page still joins if `turnUrl` is down, just
-  without the relay. Two ways to get one: Cloudflare (below), or [Metered](https://www.metered.ca/), which has a free
+  without the relay. Keep credentials out of the repository: put the live site's settings in `Tools/site/config.js`
+  (git ignores it), and `Tools/deploy_pages.sh` deploys it in place of the template's `config.js`. This site's
+  Metered servers are there. Two ways to get one: Cloudflare (below), or [Metered](https://www.metered.ca/), which has a free
   plan:
   1. Sign up, then **TURN Server ▸ Credentials ▸ Create Credential** (allow a couple of minutes before it works).
   2. Either click the credential's **ICE** button and paste the array it copies as `turn: [...]`, or use its API key as

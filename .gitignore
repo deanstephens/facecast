@@ -126,3 +126,5 @@ __pycache__/
 /Tools/web/node_modules/
 /Tools/turn-worker/node_modules/
 /Tools/turn-worker/.wrangler/
+# The live site's settings, with credentials (Tools/deploy_pages.sh deploys them)
+/Tools/site/

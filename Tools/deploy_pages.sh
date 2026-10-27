@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Publishes the web build (Builds/WebGL) to GitHub Pages: force-pushes it as the only commit of the repository's
 # gh-pages branch, then makes sure Pages serves that branch. The build goes up as plain files (no Git LFS: Pages
-# would serve LFS pointers instead of the files).
+# would serve LFS pointers instead of the files). If Tools/site/config.js exists (the live site's settings, with its
+# TURN credentials, kept out of git), it goes up in place of the build's config.js.
 #
 #   Tools/deploy_pages.sh            # deploy to the repository at the "origin" remote
 #   Tools/deploy_pages.sh --build    # build the web player first (headless Unity)
@@ -27,6 +28,10 @@ STAGE=$(mktemp -d)
 trap 'rm -rf "$STAGE"' EXIT
 cp -R "$BUILD/." "$STAGE/"
 touch "$STAGE/.nojekyll"   # serve files as they are, without Jekyll
+if [[ -f Tools/site/config.js ]]; then
+  cp Tools/site/config.js "$STAGE/config.js"
+  echo "Using the live site's settings, Tools/site/config.js."
+fi
 (
   cd "$STAGE"
   git init -q -b gh-pages
