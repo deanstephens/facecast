@@ -1,6 +1,7 @@
 // End-to-end test of the web build: two Chrome windows with fake cameras and microphones join the same room over
 // the real signalling network, find each other, stand face to face, and must each see the other's camera on their
-// avatar's face screen and receive their voice. The fake cameras show a portrait (fixtures/face.mjpeg), so the face
+// avatar's face screen and receive their voice. Clicking the game captures the mouse to look around, and once the
+// browser lets it go (Esc), moving it must leave the view alone. The fake cameras show a portrait (fixtures/face.mjpeg), so the face
 // zoom must find the face, zoom in on it and send the crop to the other. Then one writes a sticky note in the page's
 // editor and sticks it on a noticeboard, and the other sees it and moves it; she posts a question in the question box,
 // and he pulls it out and lays it on the table. He shares his screen (Chrome's fake screen): a projection goes up in
@@ -84,6 +85,7 @@ async function open(name) {
 const noteOnBoard = (page, text) => page.evaluate(t => (window.facecast.debug.notes()?.boards[0].notes || []).find(n => n.text === t) || null, text)
 const questionIn = (page, where, text) => page.evaluate(([w, t]) => (window.facecast.debug.notes()?.[w] || []).find(n => n.text === t) || null, [where, text])
 const near = (n, x, y) => n && Math.abs(n.x - x) < 0.02 && Math.abs(n.y - y) < 0.02
+const deltaAngle = (a, b) => ((a - b + 540) % 360) - 180
 const fmt = c => c ? `x ${c.x.toFixed(2)} y ${c.y.toFixed(2)} w ${c.w.toFixed(2)} h ${c.h.toFixed(2)}` : 'none'
 // Ana's face zoom, once it has settled on a face; Ben's copy of her crop.
 const anaZoom = page => page.evaluate(() => window.facecast.debug.faceZoom())
@@ -146,6 +148,31 @@ try {
     log(`${name} hears the other at up to ${level.toFixed(2)}`)
     if (level <= 0.05) failures.push(`${name} heard nothing from the other`)
   }
+
+  // The mouse: a click on the game captures it, and moving it looks around. Once the browser lets go (Esc does this;
+  // so does exitPointerLock), moving it must leave the view alone, and another click captures it again.
+  const yawOf = page => page.evaluate(() => window.facecast.debug.pose()?.[3])
+  const pointerLocked = page => page.evaluate(() => !!document.pointerLockElement)
+  await a.page.mouse.click(640, 400, {delay: 120})  // a person's click: the browser grants the lock as it ends
+  await until('a click to capture the mouse', () => pointerLocked(a.page), 5)
+  let before = await yawOf(a.page)
+  await a.page.mouse.move(820, 400, {steps: 12})
+  await sleep(500)
+  const turned = Math.abs(deltaAngle(await yawOf(a.page), before))
+  if (turned < 3) failures.push(`moving the captured mouse turned Ana's view only ${turned.toFixed(1)}°`)
+  await a.page.evaluate(() => document.exitPointerLock())
+  await until('the mouse to be let go', async () => !(await pointerLocked(a.page)), 5)
+  await sleep(300)
+  before = await yawOf(a.page)
+  await a.page.mouse.move(380, 420, {steps: 12})
+  await sleep(600)
+  const drift = Math.abs(deltaAngle(await yawOf(a.page), before))
+  if (drift > 0.5) failures.push(`moving the free mouse still turned Ana's view, by ${drift.toFixed(1)}°`)
+  await a.page.mouse.click(640, 400, {delay: 120})  // a person's click: the browser grants the lock as it ends
+  await until('another click to capture the mouse again', () => pointerLocked(a.page), 5)
+  await a.page.evaluate(() => document.exitPointerLock())
+  await a.page.evaluate(() => window.facecast.debug.unity('teleport 0 -6 0 4'))
+  log(`the mouse: captured, it turned the view ${turned.toFixed(0)}°; let go, moving it turned it ${drift.toFixed(1)}°`)
 
   // Face zoom: the portrait's face is left of centre, so the crop must zoom in and move left to frame it.
   for (const {name, page} of pages) {

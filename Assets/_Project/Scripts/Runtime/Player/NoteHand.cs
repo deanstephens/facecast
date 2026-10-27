@@ -117,7 +117,7 @@ namespace Facecast
                 Lose($"{who} took that {(held is { question: true } ? "question" : "note")} first");
             }
 
-            bool locked = Cursor.lockState == CursorLockMode.Locked;
+            bool locked = MouseLock.Captured;
             bool active = !Writing && (AlwaysAim || (locked && _wasLocked && _player.InputEnabled));
             _wasLocked = locked;
             Aim = active ? Point(_player.Cam) : default;
@@ -244,8 +244,7 @@ namespace Facecast
         {
             Writing = true;
             _player.Typing = true;
-            Cursor.lockState = CursorLockMode.None;
-            Cursor.visible = true;
+            MouseLock.Release();
             if (WebBridge.Available) WebBridge.OpenNoteEditor(n.text, n.color, n.question);
             else if (Overlay.Instance) Overlay.Instance.OpenNoteEditor(n.text, n.color, n.question);
             else OnWritten(true, n.text, n.color);  // nowhere to write: keep it as it is

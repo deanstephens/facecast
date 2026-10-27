@@ -135,17 +135,18 @@ join both. Both share your one camera.
 fake cameras and microphones (a portrait, `Tools/web/fixtures/face.mjpeg`, and a beep) in a fresh room over the real
 relays, has one go through the join card (typing her name, picking a colour, pressing Enter) and the other join from
 the address, stands them face to face, and checks that each sees the other's camera on their face screen and hears
-them. Each browser must find the portrait's face and zoom in on it (it's left of centre, so the crop must move too),
-he must get her crop, and her turning the zoom off and on must reach him. Then she takes a note from a noticeboard,
-types on it in the page's editor, makes it green and sticks it on the board; he must see it arrive and moves it; she
-must see it move. She writes a question on a card (the page's editor, as a card) and posts it in the question box; he
-must find it in his box, pulls it out and lays it on the table; she must see it there. He shares his screen (Chrome's
-fake screen) with the screen button: his projection must go up in front of him, and she must get its place and his
-screen's picture on it. A third browser joining afterwards must find the note where he put it, the question on the
-table and his projection with his screen; when he stops sharing, it must come down for both of them. Screenshots of
-the card, both views, the note and question editors, the board, the table and his projection go to
-`Screenshots/web_*.png`. `npm run e2e -- --headed` shows the windows; `npm run e2e -- --url
-https://you.github.io/facecast/` tests the deployed site.
+them. A click must capture her mouse so moving it turns her view, and once it's let go (as Esc does) moving it must
+not. Each browser must find the portrait's face and zoom in on it (it's left of centre, so the crop must move too), he
+must get her crop, and her turning the zoom off and on must reach him. Then she takes a note from a noticeboard, types
+on it in the page's editor, makes it green and sticks it on the board; he must see it arrive and moves it; she must
+see it move. She writes a question on a card (the page's editor, as a card) and posts it in the question box; he must
+find it in his box, pulls it out and lays it on the table; she must see it there. He shares his screen (Chrome's fake
+screen) with the screen button: his projection must go up in front of him, and she must get its place and his screen's
+picture on it. A third browser joining afterwards must find the note where he put it, the question on the table and
+his projection with his screen; when he stops sharing, it must come down for both of them. Screenshots of the card,
+both views, the note and question editors, the board, the table and his projection go to `Screenshots/web_*.png`. `npm
+run e2e -- --headed` shows the windows; `npm run e2e -- --url https://you.github.io/facecast/` tests the deployed
+site.
 
 ## How it works
 
@@ -193,6 +194,9 @@ The page (`Assets/WebGLTemplates/Facecast/`) and the Unity build split the work:
   the way) and puts up a `Projection` there; the page then sends that spot and the screen to everyone. Every browser
   shows the picture on the projection the way faces show cameras (`VideoFeeds`, key `screen:<peer>`), fitted whole by
   the `Facecast/Screen` shader (`VideoCrop.AspectFit`).
+- **The mouse.** The browser decides when the game has the mouse: Esc lets it go without Unity's `Cursor.lockState`
+  hearing of it. So in a browser the game asks the page every frame whether anything holds the pointer
+  (`MouseLock`); while it's free, moving it doesn't turn your view, and a click on the game captures it again.
 - **Keyboard.** The game listens to the keyboard on the whole page, so the page keeps key events aimed at its text
   fields away from the game (a capture-phase listener installed before the game loads), and calls those fields' own key
   handlers (Enter to join, Esc and Ctrl+Enter on a note) itself.

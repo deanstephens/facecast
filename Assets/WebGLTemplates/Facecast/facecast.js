@@ -143,6 +143,7 @@ window.facecast = {
       })),
     }),
     uploads: () => ({...uploads}),
+    pose: () => lastPose,
     notes: () => notesReport,
     notesReceived: () => notesReceived,
     writing: () => writing,

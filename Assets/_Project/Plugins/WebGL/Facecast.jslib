@@ -23,6 +23,11 @@ mergeInto(LibraryManager.library, {
     if (window.facecast) window.facecast.toggleCam();
   },
 
+  // The browser has the last word on pointer lock (Esc releases it without telling Unity's Cursor.lockState).
+  FC_PointerLocked: function () {
+    return document.pointerLockElement ? 1 : 0;
+  },
+
   FC_ToggleShare: function () {
     if (window.facecast) window.facecast.toggleShare();
   },

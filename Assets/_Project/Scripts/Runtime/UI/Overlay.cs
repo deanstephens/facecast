@@ -68,7 +68,7 @@ namespace Facecast
             if (_root == null) return;
             var app = App.Instance;
             bool joined = app && app.Joined;
-            bool locked = UnityEngine.Cursor.lockState == CursorLockMode.Locked;
+            bool locked = MouseLock.Captured;
             bool touring = app && !app.Player.InputEnabled;
             var hand = NoteHand.Instance;
             bool writing = NoteEditorOpen || (hand && hand.Writing);  // the page's editor, in a browser
