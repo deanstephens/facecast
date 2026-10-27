@@ -1,0 +1,8 @@
+# Facecast's TURN credentials Worker (src/index.js). Deploy: npx wrangler deploy
+name = "facecast-turn"
+main = "src/index.js"
+compatibility_date = "2026-09-01"
+
+[vars]
+# The pages that may ask for TURN servers: the deployed site, and the local server for testing.
+ALLOWED_ORIGINS = "https://deanstephens.github.io,http://localhost:8790,http://localhost:8791"

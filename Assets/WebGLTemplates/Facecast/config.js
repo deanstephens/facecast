@@ -10,7 +10,9 @@ window.FACECAST_CONFIG = {
   // Either paste a fixed list of servers here (a metered.ca credential's "ICE Servers Array", Twilio, your own coturn):
   //   turn: [{urls: 'turn:turn.example.com:3478', username: 'user', credential: 'secret'}],
   turn: [],
-  // ...or a URL that hands out fresh ones each time someone joins, such as a metered.ca credential's:
+  // ...or a URL that hands out fresh ones each time someone joins: the Cloudflare Worker in Tools/turn-worker, or a
+  // metered.ca credential's:
+  //   turnUrl: 'https://facecast-turn.yourname.workers.dev/',
   //   turnUrl: 'https://yourapp.metered.live/api/v1/turn/credentials?apiKey=YOUR_API_KEY',
   // Both can be set. Anything here is public (anyone can read config.js), so use a TURN account meant for this.
   // Check them with: cd Tools/web && npm run turn-check -- --url https://you.github.io/facecast/

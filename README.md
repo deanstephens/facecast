@@ -114,7 +114,8 @@ holds settings you can edit on the deployed site:
   until there's a TURN server to relay their video through. `turn` is a fixed list of servers; `turnUrl` is a URL the
   page fetches fresh ones from each time someone joins (an array of ICE servers, or `{iceServers}`). Both can be set,
   and anything there is public, so use a TURN account meant for it. The page still joins if `turnUrl` is down, just
-  without the relay. Setting one up with [Metered](https://www.metered.ca/) (it has a free plan):
+  without the relay. Two ways to get one: Cloudflare (below), or [Metered](https://www.metered.ca/), which has a free
+  plan:
   1. Sign up, then **TURN Server ▸ Credentials ▸ Create Credential** (allow a couple of minutes before it works).
   2. Either click the credential's **ICE** button and paste the array it copies as `turn: [...]`, or use its API key as
      `turnUrl: 'https://<your app>.metered.live/api/v1/turn/credentials?apiKey=<key>'`.
@@ -122,8 +123,26 @@ holds settings you can edit on the deployed site:
      through each server, and `npm run e2e -- --url https://you.github.io/facecast/ --relay` (or `?relay` in the
      address) sends everything through TURN, the way people on strict networks connect.
 
-  Cloudflare, Twilio and others hand out credentials only from a server of your own (a small worker that returns them
-  can be the `turnUrl`), or run [coturn](https://github.com/coturn/coturn).
+  Twilio and others hand out credentials only from a server of your own, like the Cloudflare one below; or run
+  [coturn](https://github.com/coturn/coturn).
+
+**TURN through Cloudflare.** Cloudflare's TURN service costs $0.05 per GB relayed, and the first 1,000 GB each month
+are free. It gives out credentials only to whoever holds its TURN key, which mustn't be public, so a tiny Cloudflare
+Worker (`Tools/turn-worker`) holds the key and hands the page fresh credentials (12 hours long) when someone joins. It
+answers only the pages listed in `ALLOWED_ORIGINS` in its `wrangler.toml` (the GitHub Pages site and localhost), and
+leaves out the port 53 servers browsers block. To set it up:
+
+1. In the Cloudflare dashboard, open **Realtime** (once called Calls) **▸ TURN Server**, create a TURN key, and copy its
+   key ID (**Turn Token ID**) and **API Token** (shown only once).
+2. `cd Tools/turn-worker && npm install && npx wrangler login` (opens the browser to sign in to Cloudflare).
+3. `npx wrangler deploy` prints the Worker's address, `https://facecast-turn.<your subdomain>.workers.dev`.
+4. Give it the key: `npx wrangler secret put TURN_KEY_ID` and `npx wrangler secret put TURN_KEY_API_TOKEN`, pasting
+   each value when asked (they stay in Cloudflare, not in the repository).
+5. Set `turnUrl` in `Assets/WebGLTemplates/Facecast/config.js` to the Worker's address, rebuild and deploy the site,
+   then `cd Tools/web && npm run turn-check -- --url https://you.github.io/facecast/`.
+
+`cd Tools/turn-worker && npm test` checks the Worker with Cloudflare's API faked. If the site moves, update
+`ALLOWED_ORIGINS` and run `npx wrangler deploy` again.
 - `net`: `'nostr'` (default) or `'mqtt'`: which public network browsers use to find each other. `?net=mqtt` in the
   address overrides it.
 - `relayUrls`: your own Nostr relays or MQTT brokers instead of the public ones.
@@ -271,6 +290,7 @@ Tools/
   web/               npm tools: vendor.mjs (bundles Trystero, copies MediaPipe), e2e.mjs (the browser test),
                      turn-check.mjs (does a site's TURN server relay?), faceframe.test.mjs (the face zoom's
                      arithmetic), fixtures/ (a portrait for the fake cameras)
+  turn-worker/       a Cloudflare Worker that hands the page TURN credentials (optional; see TURN through Cloudflare)
 ```
 
 ## Building

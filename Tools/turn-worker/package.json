@@ -1,0 +1,13 @@
+{
+  "name": "facecast-turn-worker",
+  "private": true,
+  "description": "A Cloudflare Worker that hands Facecast's pages TURN credentials (see src/index.js).",
+  "type": "module",
+  "scripts": {
+    "test": "node --test",
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "wrangler": "4.147.0"
+  }
+}
