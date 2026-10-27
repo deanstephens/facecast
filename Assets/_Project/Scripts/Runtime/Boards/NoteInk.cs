@@ -130,14 +130,34 @@ namespace Facecast
 #pragma warning disable CS0618
     public static class NoteInk
     {
-        /// <summary>Handwriting sizes in metres (em), biggest first.</summary>
-        public static readonly float[] Sizes = { 0.036f, 0.03f, 0.025f, 0.021f, 0.0175f, 0.0145f };
+        /// <summary>Where writing goes on a kind of paper (metres from its centre, y up) and how big it can be.</summary>
+        public sealed class Sheet
+        {
+            /// <summary>Handwriting sizes in metres (em), biggest first.</summary>
+            public float[] Sizes;
+            public float Width, BodyTop, BodyBottom;
+            /// <summary>Signed "— name" small in the bottom right corner, or anonymous.</summary>
+            public bool Signed;
+            public float SignatureY, SignatureSize, SignatureRight;
+        }
+
         /// <summary>
-        /// The writing area on a note (metres from its centre, y up): the paper less its margins and the signature, all
-        /// above the bottom 3 cm, which curls off the board (Blender/MODELS.md) and would cover ink drawn on it.
+        /// A sticky note: the paper less its margins and the signature, all above the bottom 3 cm, which curls off the
+        /// board (Blender/MODELS.md) and would cover ink drawn on it.
         /// </summary>
-        public const float Width = 0.17f, BodyTop = 0.085f, BodyBottom = -0.05f;
-        const float SignatureY = -0.067f, SignatureSize = 0.0175f, SignatureRight = 0.082f;
+        public static readonly Sheet Sticky = new()
+        {
+            Sizes = new[] { 0.036f, 0.03f, 0.025f, 0.021f, 0.0175f, 0.0145f },
+            Width = 0.17f, BodyTop = 0.085f, BodyBottom = -0.05f,
+            Signed = true, SignatureY = -0.067f, SignatureSize = 0.0175f, SignatureRight = 0.082f,
+        };
+
+        /// <summary>A question card: below its red rule, unsigned (questions are anonymous).</summary>
+        public static readonly Sheet Card = new()
+        {
+            Sizes = new[] { 0.026f, 0.022f, 0.0185f, 0.0155f, 0.013f, 0.011f },
+            Width = 0.18f, BodyTop = 0.036f, BodyBottom = -0.062f,
+        };
 
         public static readonly Color Ink = Palette.Hex("#26305A");
         public static readonly Color InkSoft = new(0.2f, 0.24f, 0.4f, 0.75f);
@@ -148,18 +168,22 @@ namespace Facecast
         static readonly List<Vector2> Uvs = new();
         static readonly List<int> Tris = new();
 
-        /// <summary>A note's writing, centred on its paper, with "— <paramref name="by"/>" small in the corner.</summary>
-        public static NoteLayout.Result BuildNote(Mesh mesh, FontAsset font, string text, string by)
+        /// <summary>
+        /// Writing centred on a sticky note (or on <paramref name="sheet"/>), with "— <paramref name="by"/>" small in the
+        /// corner if the sheet is signed.
+        /// </summary>
+        public static NoteLayout.Result BuildNote(Mesh mesh, FontAsset font, string text, string by, Sheet sheet = null)
         {
+            sheet ??= Sticky;
             Begin();
             NoteLayout.Result layout = null;
             if (font)
             {
                 Prepare(font, text + by + NoteLayout.Ellipsis + "—");
                 var f = new Metrics(font);
-                layout = NoteLayout.Fit(text, f.Advance, Width, BodyTop - BodyBottom, Sizes, f.LineHeight);
+                layout = NoteLayout.Fit(text, f.Advance, sheet.Width, sheet.BodyTop - sheet.BodyBottom, sheet.Sizes, f.LineHeight);
                 float lineH = f.LineHeight * layout.Size;
-                float top = (BodyTop + BodyBottom) * 0.5f + lineH * layout.Lines.Count * 0.5f;
+                float top = (sheet.BodyTop + sheet.BodyBottom) * 0.5f + lineH * layout.Lines.Count * 0.5f;
                 for (int i = 0; i < layout.Lines.Count; i++)
                 {
                     float baseline = top - f.Ascent * layout.Size - i * lineH;
@@ -167,11 +191,11 @@ namespace Facecast
                     float w = NoteLayout.Measure(line, f.Advance) * layout.Size;
                     Write(font, f, line, -w * 0.5f, baseline, layout.Size, Ink);
                 }
-                if (!string.IsNullOrEmpty(by))
+                if (sheet.Signed && !string.IsNullOrEmpty(by))
                 {
                     string sig = "— " + by;
-                    float w = NoteLayout.Measure(sig, f.Advance) * SignatureSize;
-                    Write(font, f, sig, Mathf.Max(SignatureRight - w, -Width * 0.5f), SignatureY, SignatureSize, InkSoft);
+                    float w = NoteLayout.Measure(sig, f.Advance) * sheet.SignatureSize;
+                    Write(font, f, sig, Mathf.Max(sheet.SignatureRight - w, -sheet.Width * 0.5f), sheet.SignatureY, sheet.SignatureSize, InkSoft);
                 }
             }
             End(mesh);

@@ -10,9 +10,9 @@ namespace Facecast.EditorTools
 {
     /// <summary>
     /// Shared generated assets: materials, one prefab per Blender model (the avatar with its <see cref="AvatarRig"/>,
-    /// the noticeboard with its <see cref="Noticeboard"/>, the sticky note with its <see cref="NoteView"/>, the scenery
-    /// with colliders), the UI and handwriting fonts and PanelSettings, the post-processing profile and the render
-    /// pipeline settings.
+    /// the noticeboard with its <see cref="Noticeboard"/>, the sticky note and question card with their
+    /// <see cref="NoteView"/>s, the question box and table, the scenery with colliders), the UI and handwriting fonts
+    /// and PanelSettings, the post-processing profile and the render pipeline settings.
     /// </summary>
     public static class FacecastAssets
     {
@@ -107,7 +107,10 @@ namespace Facecast.EditorTools
                 go.name = name;
                 if (name == "Avatar") SetUpAvatar(go);
                 else if (name == "NoticeBoard") SetUpNoticeboard(go);
-                else if (name == "StickyNote") SetUpStickyNote(go);
+                else if (name == "StickyNote") SetUpNoteView(go, "Paper", false);
+                else if (name == "QuestionCard") SetUpNoteView(go, "Card", true);
+                else if (name == "QuestionBox") SetUpQuestionBox(go);
+                else if (name == "QuestionTable") SetUpQuestionTable(go);
                 else SetUpScenery(name, go);
                 PrefabUtility.SaveAsPrefabAsset(go, $"{Paths.PrefabsDir}/{name}.prefab");
                 Object.DestroyImmediate(go);
@@ -158,22 +161,68 @@ namespace Facecast.EditorTools
                 throw new System.Exception("NoticeBoard.fbx is missing Cork, Header, Frame or a pad (see Blender/MODELS.md)");
         }
 
-        /// <summary>The paper, and an Ink child facing the reader just in front of it for the handwriting.</summary>
-        static void SetUpStickyNote(GameObject go)
+        /// <summary>
+        /// The paper (a sticky note's, or a question card's), and an Ink child facing the reader just in front of it
+        /// for the handwriting.
+        /// </summary>
+        static void SetUpNoteView(GameObject go, string paperName, bool card)
         {
-            var paper = System.Array.Find(go.GetComponentsInChildren<MeshRenderer>(), r => r.name == "Paper");
-            if (!paper) throw new System.Exception("StickyNote.fbx has no Paper (see Blender/MODELS.md)");
+            var paper = System.Array.Find(go.GetComponentsInChildren<MeshRenderer>(), r => r.name == paperName);
+            if (!paper) throw new System.Exception($"{go.name}.fbx has no {paperName} (see Blender/MODELS.md)");
             Plain(paper, Mat("M_Note"));
             var ink = new GameObject("Ink", typeof(MeshFilter), typeof(MeshRenderer));
             ink.transform.SetParent(paper.transform.parent, false);
-            // The paper's front is 1.2 mm off the board (+Z); the ink plane faces back out of it.
-            ink.transform.SetLocalPositionAndRotation(new Vector3(0f, 0f, 0.0016f), Quaternion.Euler(0f, 180f, 0f));
+            // A note's front is 1.2 mm off the board (+Z), a card's 1.5 mm (its rule 0.2 mm more); the ink plane faces
+            // back out of it.
+            ink.transform.SetLocalPositionAndRotation(new Vector3(0f, 0f, card ? 0.002f : 0.0016f), Quaternion.Euler(0f, 180f, 0f));
             var inkRenderer = ink.GetComponent<MeshRenderer>();
             Plain(inkRenderer, Mat("M_Ink"));
             inkRenderer.shadowCastingMode = ShadowCastingMode.Off;
             var view = go.AddComponent<NoteView>();
             view.Paper = paper;
             view.Ink = ink.GetComponent<MeshFilter>();
+            view.Card = card;
+        }
+
+        /// <summary>Solid to walk into and point at; its tray of blank cards a little taller than the stack.</summary>
+        static void SetUpQuestionBox(GameObject go)
+        {
+            foreach (var r in go.GetComponentsInChildren<MeshRenderer>()) Plain(r, Mat("M_Scenery"));
+            foreach (var mf in go.GetComponentsInChildren<MeshFilter>())
+            {
+                switch (mf.name)
+                {
+                    case "Stand":
+                    case "Box":
+                        // The box's mesh, not its bounds: the tray of cards hangs inside the box's bounding box.
+                        mf.gameObject.AddComponent<MeshCollider>().sharedMesh = mf.sharedMesh;
+                        break;
+                    case "Cards":
+                        var cards = mf.gameObject.AddComponent<BoxCollider>();
+                        cards.size += new Vector3(0.02f, 0.05f, 0.02f);
+                        cards.center += new Vector3(0f, 0.02f, 0f);
+                        break;
+                    case "Label":
+                        mf.GetComponent<MeshRenderer>().shadowCastingMode = ShadowCastingMode.Off;
+                        break;
+                }
+            }
+            var box = go.AddComponent<QuestionBox>();
+            box.Bind();
+            if (!box.Body || !box.Cards || !box.Label) throw new System.Exception("QuestionBox.fbx is missing Box, Cards or Label (see Blender/MODELS.md)");
+        }
+
+        static void SetUpQuestionTable(GameObject go)
+        {
+            foreach (var r in go.GetComponentsInChildren<MeshRenderer>()) Plain(r, Mat("M_Scenery"));
+            foreach (var mf in go.GetComponentsInChildren<MeshFilter>())
+            {
+                if (mf.name == "Top") mf.gameObject.AddComponent<BoxCollider>();
+                else mf.gameObject.AddComponent<MeshCollider>().sharedMesh = mf.sharedMesh;
+            }
+            var table = go.AddComponent<QuestionTable>();
+            table.Bind();
+            if (!table.TopCollider) throw new System.Exception("QuestionTable.fbx is missing Top (see Blender/MODELS.md)");
         }
 
         static void Plain(Renderer r, Material m)

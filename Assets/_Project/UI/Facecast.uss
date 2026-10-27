@@ -119,6 +119,27 @@
     border-bottom-color: rgba(0, 0, 0, 0.12);
 }
 
+/* A question card: cream, shorter, with a red rule across the top. */
+.fc-note--card {
+    height: 266px;
+    padding-top: 46px;
+    background-color: rgb(251, 246, 232);
+}
+
+.fc-note-rule {
+    display: none;
+    position: absolute;
+    left: 14px;
+    right: 14px;
+    top: 34px;
+    height: 3px;
+    background-color: rgb(224, 103, 95);
+}
+
+.fc-note--card > .fc-note-rule {
+    display: flex;
+}
+
 .fc-note-text {
     flex-grow: 1;
     margin: 0;

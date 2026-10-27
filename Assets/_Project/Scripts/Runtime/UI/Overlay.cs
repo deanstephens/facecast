@@ -20,11 +20,12 @@ namespace Facecast
 
         VisualElement _root, _plates, _crosshair;
         Label _hint, _banner, _prompt;
-        VisualElement _editor, _paper;
+        VisualElement _editor, _paper, _swatchRow;
         TextField _noteText;
-        Label _noteCount;
+        Label _noteCount, _noteTip;
         readonly List<Button> _noteSwatches = new();
         int _noteColor;
+        bool _question;
         readonly Dictionary<RemoteAvatar, Label> _labels = new();
         readonly List<RemoteAvatar> _gone = new();
 
@@ -88,13 +89,24 @@ namespace Facecast
         /// <summary>What's written on the open note (tests type here).</summary>
         public string NoteDraft { get => _noteText?.value ?? ""; set { if (_noteText != null) _noteText.value = value; } }
         public int NoteDraftColor => _noteColor;
+        /// <summary>The open note is a question card.</summary>
+        public bool NoteDraftIsQuestion => _question;
 
-        public void OpenNoteEditor(string text, int color)
+        /// <summary>Opens a sticky note of <paramref name="color"/> to write on, or a question card.</summary>
+        public void OpenNoteEditor(string text, int color, bool question = false)
         {
             if (_root == null) return;
             if (_editor == null) BuildNoteEditor();
+            _question = question;
             _noteText.value = text ?? "";
-            SetNoteColor(color);
+            _noteText.textEdition.placeholder = question ? "Ask a question…" : "Write something…";
+            _paper.EnableInClassList("fc-note--card", question);
+            Show(_swatchRow, !question);
+            _noteTip.text = question
+                ? "Ctrl+Enter: done   ·   Esc: cancel   ·   then post it in the box"
+                : "Ctrl+Enter: done   ·   Esc: cancel   ·   then click a board to stick it";
+            if (question) _paper.style.backgroundColor = StyleKeyword.Null;
+            else SetNoteColor(color);
             Show(_editor, true);
             _noteText.schedule.Execute(() => _noteText.Focus());
         }
@@ -123,6 +135,9 @@ namespace Facecast
             _paper = new VisualElement();
             _paper.AddToClassList("fc-note");
             card.Add(_paper);
+            var rule = new VisualElement { pickingMode = PickingMode.Ignore };
+            rule.AddToClassList("fc-note-rule");  // a question card's red rule
+            _paper.Add(rule);
             _noteText = new TextField { multiline = true, maxLength = Notes.MaxText };
             _noteText.AddToClassList("fc-note-text");
             if (Noticeboards.Instance && Noticeboards.Instance.NoteFont)
@@ -134,7 +149,7 @@ namespace Facecast
             _noteCount.AddToClassList("fc-note-count");
             _paper.Add(_noteCount);
 
-            var swatches = new VisualElement();
+            var swatches = _swatchRow = new VisualElement();
             swatches.AddToClassList("fc-note-swatches");
             _noteSwatches.Clear();
             for (int i = 0; i < Notes.Colors.Length; i++)
@@ -158,9 +173,9 @@ namespace Facecast
             actions.Add(cancel);
             actions.Add(done);
             card.Add(actions);
-            var tip = new Label("Ctrl+Enter: done   ·   Esc: cancel   ·   then click a board to stick it");
-            tip.AddToClassList("fc-note-tip");
-            card.Add(tip);
+            _noteTip = new Label();
+            _noteTip.AddToClassList("fc-note-tip");
+            card.Add(_noteTip);
             _root.Add(_editor);
         }
 

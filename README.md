@@ -2,8 +2,9 @@
 
 Walk around a sunny town square with friends, in first person. Everyone is a small hovering robot whose face is a
 screen, and **your webcam is your face**, zoomed in so your face fills it: whoever walks up to you sees you on it, and
-hears you, louder the closer they stand. Four noticeboards stand round the square: take a sticky note from one, write
-on it and stick it anywhere on any board for everyone to read.
+hears you, louder the closer they stand. Four noticeboards stand round the square for a retrospective (*Continue*,
+*Stop*, *Invent*, *Act*): take a sticky note from one, write on it and stick it anywhere on any board. Beside them, a
+question box takes written questions, to be pulled out one at a time, read out and laid on the table next to it.
 
 It's a static web page: Unity for the world, Blender for every model, and WebRTC between the browsers for video,
 voice and movement. Put it on GitHub Pages (or any static host), send a friend the room's link, and you meet. There
@@ -32,8 +33,12 @@ with the link can join, so pick a room name nobody will guess for a private chat
 | Take a sticky note | Look at a noticeboard's notepads (the shelf under the cork) and click |
 | Stick it on a board | Look where it should go on any board's cork and click |
 | Move a note | Click it to pick it up, then click where it should go |
-| Write on the note you're holding | E |
-| Throw it away | X (or Delete) |
+| Write on the note or card you're holding | E |
+| Write a question | Look at the tray of cards on the question box's side and click |
+| Post it | Click the question box while you hold it |
+| Pull out the next question | Click the question box with empty hands |
+| Lay it on the table | Look where it should go on the table and click |
+| Throw away what you're holding | X (or Delete) |
 | Microphone on/off | M, or the microphone button |
 | Camera on/off | V, or the camera button |
 | Face zoom on/off | Z, or the face button |
@@ -49,16 +54,25 @@ the right way round. Names float
 over everyone's heads and light up, along with their antenna and ear lights and the rim of their screen, while they
 speak. Use headphones: other people's voices coming out of speakers get back into your microphone.
 
-**Noticeboards.** Four boards stand between the paths, titled *Notices*, *Ideas*, *Questions* and *Thank you!*. Each
+**Noticeboards.** Four boards stand between the paths, titled *Continue*, *Stop*, *Invent* and *Act*. Each
 has a shelf of yellow, pink, blue and green notepads. Click one and a note opens to write on (up to 140 characters;
 you can change its colour); press Done (Ctrl+Enter, ⌘ Enter on a Mac) and it's in your hand. Point at any board and the
 note shows where it will go; click to stick it there. Anyone can pick up any note to move it, write on it again or
 throw it away, and everyone sees it in their hand while they carry it. Handwriting is drawn as large as the note
 allows, signed with the writer's name. A board holds 40 notes.
 
-The boards belong to the room: everyone in it sees the same notes, and someone arriving gets them from the people
-already there. Your browser also keeps each room's notes, so a room you come back to still has them even if you're
-first in (and brings them to the others). An empty room has a single note explaining how it works.
+**Question box.** Where one of the benches was, by the east path and the *Continue* board, stands a box with a slot
+and a tray of blank cards on its side, and a table beside it. Click the tray and a card opens to write a question on;
+press Done and it's in your hand; click the box to post it. Questions are anonymous: unlike sticky notes, cards aren't
+signed. The box's label says how many are inside. With empty hands, click the box to pull out the question that has
+waited longest (one at a time) and read it out; then click the table to lay it down, face up and turned to read the
+right way from where you stand. Cards on the table can be picked up again, posted back into the box or thrown away.
+The box holds 60 questions, the table 30 cards.
+
+The boards, the box and the table belong to the room: everyone in it sees the same notes and questions, and someone
+arriving gets them from the people already there. Your browser also keeps each room's notes, so a room you come back
+to still has them even if you're first in (and brings them to the others). An empty room has a single note and a
+single card explaining how they work.
 
 **Demo bots.** `?bots=3` in the address (before the `#room`) adds up to eight strollers who chat with each other and
 turn to face you. Only you see them, and they wear your own camera, which makes a quick check that your picture comes
@@ -112,9 +126,11 @@ the address, stands them face to face, and checks that each sees the other's cam
 them. Each browser must find the portrait's face and zoom in on it (it's left of centre, so the crop must move too),
 he must get her crop, and her turning the zoom off and on must reach him. Then she takes a note from a noticeboard,
 types on it in the page's editor, makes it green and sticks it on the board; he must see it arrive and moves it; she
-must see it move; and a third browser joining afterwards must find it where he put it. Screenshots of the card, both
-views, the note editor and the board go to `Screenshots/web_*.png`. `npm run e2e -- --headed` shows the windows; `npm
-run e2e -- --url https://you.github.io/facecast/` tests the deployed site.
+must see it move. She writes a question on a card (the page's editor, as a card) and posts it in the question box; he
+must find it in his box, pulls it out and lays it on the table; she must see it there. A third browser joining
+afterwards must find the note where he put it and the question on the table. Screenshots of the card, both views, the
+note and question editors, the board and the table go to `Screenshots/web_*.png`. `npm run e2e -- --headed` shows the
+windows; `npm run e2e -- --url https://you.github.io/facecast/` tests the deployed site.
 
 ## How it works
 
@@ -144,17 +160,18 @@ The page (`Assets/WebGLTemplates/Facecast/`) and the Unity build split the work:
   (`VideoCrop.AspectFill`), or to the part their browser says their face is in, gliding between updates; adds a glass
   sheen and the speaking rim, and fades to the cartoon face when there's no
   video.
-- **Notes.** The game keeps every note in the room in a `NoteBook`: where it's stuck, what it says, who's carrying it.
-  Every change (stuck, picked up, rewritten, thrown away) gets a version number (a Lamport clock, with the changer's
-  peer id to break ties) and goes to everyone in a `notes` message; each browser keeps the newest version of each note,
-  so all boards agree without a server, whatever order messages arrive in. Thrown-away notes are remembered, so an old
-  copy can't bring them back. A newcomer's first `hello` makes everyone send them all their notes; if two people grab
-  the same note at once, the same tie-break picks one and the other lets go. The page only carries the messages and
-  shows the note you write on (its `<textarea>`, with your browser's own editing, spelling and input methods); outside
-  a browser the overlay has its own. Handwriting is geometry: `NoteInk` lays the words out in Patrick Hand (wrapped,
-  at the biggest size that fits) and builds glyph quads from the font's signed-distance-field atlas, which the
-  `Facecast/Ink` shader draws crisply at any distance and lights like the paper. Each browser saves the room's notes
-  (`PlayerPrefs`, which is IndexedDB in a browser).
+- **Notes and questions.** The game keeps every note and question card in the room in a `NoteBook`: where it is (one
+  of the boards, the question box or the table), what it says, who's carrying it. Every change (stuck, picked up,
+  rewritten, thrown away) gets a version number (a Lamport clock, with the changer's peer id to break ties) and goes
+  to everyone in a `notes` message; each browser keeps the newest version of each note, so all boards agree without a
+  server, whatever order messages arrive in. Thrown-away notes are remembered, so an old copy can't bring them back.
+  The box is just a place: its questions come out oldest first. A newcomer's first `hello` makes everyone send them
+  all their notes; if two people grab the same note at once, the same tie-break picks one and the other lets go. The
+  page only carries the messages and shows the note you write on (its `<textarea>`, with your browser's own editing,
+  spelling and input methods); outside a browser the overlay has its own. Handwriting is geometry: `NoteInk` lays the
+  words out in Patrick Hand (wrapped, at the biggest size that fits) and builds glyph quads from the font's
+  signed-distance-field atlas, which the `Facecast/Ink` shader draws crisply at any distance and lights like the
+  paper. Each browser saves the room's notes (`PlayerPrefs`, which is IndexedDB in a browser).
 - **Keyboard.** The game listens to the keyboard on the whole page, so the page keeps key events aimed at its text
   fields away from the game (a capture-phase listener installed before the game loads), and calls those fields' own key
   handlers (Enter to join, Esc and Ctrl+Enter on a note) itself.
@@ -177,11 +194,11 @@ Assets/_Project/
     Net/             Room (messages → avatars), NetEvent, WebBridge (calls into the page), DemoBots
     Avatars/         AvatarRig (procedural animation, colour, face screen), RemoteAvatar, AvatarPose + PoseBuffer,
                      VideoFeeds (external video textures) + VideoCrop
-    Boards/          Noticeboards (the room's notes: syncing, saving, notes in others' hands), Noticeboard (one board:
-                     places on its cork, laying out its notes), Notes (NoteData, NoteBook), NoteInk (handwriting),
-                     NoteView, SampleNotes
+    Boards/          Noticeboards (the room's notes and questions: syncing, saving, what's in others' hands),
+                     NoteSurface (laying notes out on a board's cork or the table), Noticeboard, QuestionBox,
+                     QuestionTable, Notes (NoteData, NoteBook), NoteInk (handwriting), NoteView, SampleNotes
     Player/          LocalPlayer (first-person movement and look, pose reporting, the pre-join orbit), NoteHand (taking,
-                     writing, sticking, moving and throwing away notes)
+                     writing, sticking, moving and throwing away notes; posting, pulling out and laying down questions)
     UI/              Overlay (UI Toolkit: names over heads, crosshair and what a click would do, hints, the offline note
                      editor)
   Scripts/Editor/    builders (assets, prefabs, scene, project settings, player builds), PlayFromStartScene
@@ -198,7 +215,8 @@ Assets/WebGLTemplates/Facecast/
   lib/               Trystero, bundled; MediaPipe's face detector and model (both put there by Tools/web/vendor.mjs)
 Blender/
   MODELS.md          the model catalogue: names, child objects, anchors and pivots Unity relies on
-  scripts/           common.py (mesh builder + export), models_avatar.py, models_plaza.py, models_boards.py, build_all.py
+  scripts/           common.py (mesh builder + export), models_avatar.py, models_plaza.py, models_boards.py,
+                     models_questions.py, build_all.py
   source/, previews/ .blend files and preview renders
 Tools/
   serve_web.py       serves the web build locally, like GitHub Pages
@@ -240,18 +258,21 @@ cd Tools/web && npm run e2e                       # the web build, three browser
 
 EditMode tests cover pose playback (clock offsets, late and stale packets, extrapolation), video cropping, the page's
 messages and launch options, and notes: versions agreeing whatever order they arrive in, ties, thrown-away notes
-staying gone, cleaning notes from outside, fitting words on a note, stacking overlapping notes, the wire format.
-PlayMode tests load the scene offline: you and the demo bots, a peer arriving, moving and leaving through the same
-messages the page sends, names over heads, walking into the fountain and the outer wall, walking with a simulated
-keyboard; and the noticeboards: four boards facing the fountain with their titles written on, taking a note from the
-notepad you're looking at, writing on it, sticking it where you look, picking it up and throwing it away, the page's
-editor answering, a peer's notes arriving and moving, a peer carrying a note and leaving with it, two people grabbing
-the same note, a full board, and a newcomer being sent every note.
+staying gone, cleaning notes from outside, fitting words on a note, stacking overlapping notes, the wire format, where
+question cards may go. PlayMode tests load the scene offline: you and the demo bots, a peer arriving, moving and
+leaving through the same messages the page sends, names over heads, walking into the fountain and the outer wall,
+walking with a simulated keyboard; and the noticeboards: four boards facing the fountain with their titles written on,
+taking a note from the notepad you're looking at, writing on it, sticking it where you look, picking it up and
+throwing it away, the page's editor answering, a peer's notes arriving and moving, a peer carrying a note and leaving
+with it, two people grabbing the same note, a full board, and a newcomer being sent every note; and the question
+corner: the boards' titles, pointing at the tray, the box and the table, writing a question and posting it (and a
+sticky note refusing to go in), questions coming out oldest first and one at a time and lying face up on the table
+turned to you, a peer's questions arriving and coming back when they leave holding one, and a full table.
 
 **Screenshot tour.** A desktop build run with `-autocapture <dir>` photographs the square from above, then poses three
 demo bots in front of you and saves your first-person view, a close-up of a face screen and a wider shot with names
-(one carrying a note); then it writes a note at a noticeboard, holds it, holds it up to the board and sticks it, and
-quits:
+(one carrying a note); then it writes a note at a noticeboard, holds it, holds it up to the board and sticks it; then
+it starts writing a question, pulls one out of the question box, reads it and lays it on the table; and quits:
 
 ```bash
 Builds/StandaloneOSX/Facecast.app/Contents/MacOS/Facecast -autocapture "$PWD/Screenshots" -screen-width 1600 -screen-height 900 -screen-fullscreen 0

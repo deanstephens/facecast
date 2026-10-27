@@ -170,6 +170,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Facecast.Runtime::Facecast.NoteView
   Paper: {fileID: 6621939639598077528}
   Ink: {fileID: 8460013352275625590}
+  Card: 0
 --- !u!1 &8939238256924621319
 GameObject:
   m_ObjectHideFlags: 0

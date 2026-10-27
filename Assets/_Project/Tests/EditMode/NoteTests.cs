@@ -116,6 +116,25 @@ namespace Facecast.Tests
             Assert.That(book.Get("n" + (NoteBook.MaxKept + 49)), Is.Not.Null);
         }
 
+        [Test]
+        public void QuestionCardsGoInTheBoxOrOnTheTableAndFaceAnyWayThere()
+        {
+            Assert.That(Notes.Fits(question: true, Notes.Box) && Notes.Fits(true, Notes.Table));
+            Assert.That(Notes.Fits(true, 0) || Notes.Fits(false, Notes.Box) || Notes.Fits(false, Notes.Table) || Notes.Fits(true, -1), Is.False);
+            Assert.That(Notes.Fits(false, 3));
+            Assert.That((Notes.Capacity(0), Notes.Capacity(Notes.Box), Notes.Capacity(Notes.Table)),
+                Is.EqualTo((Notes.MaxPerBoard, Notes.MaxInBox, Notes.MaxOnTable)));
+
+            var onTable = new NoteData { id = "q", board = Notes.Table, question = true, tilt = 190f };
+            Assert.That(onTable.Sanitize());
+            Assert.That(onTable.tilt, Is.EqualTo(-170f).Within(1e-4f), "turned to face whoever laid it down");
+            var onBoard = new NoteData { id = "n", board = 2, tilt = 190f };
+            Assert.That(onBoard.Sanitize());
+            Assert.That(onBoard.tilt, Is.EqualTo(Notes.MaxTilt), "a note on a board only leans");
+            Assert.That(new NoteData { id = "x", board = Notes.PlaceCount }.Sanitize(), Is.False);
+            Assert.That(Notes.HalfSize(true), Is.EqualTo(new Vector2(0.1f, 0.07f)));
+        }
+
         static float Mono(char c) => 0.5f;
         static readonly float[] Sizes = { 0.04f, 0.03f, 0.02f, 0.01f };
 

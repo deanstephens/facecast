@@ -2,9 +2,9 @@
 // the real signalling network, find each other, stand face to face, and must each see the other's camera on their
 // avatar's face screen and receive their voice. The fake cameras show a portrait (fixtures/face.mjpeg), so the face
 // zoom must find the face, zoom in on it and send the crop to the other. Then one writes a sticky note in the page's
-// editor and sticks it on a
-// noticeboard, the other sees it and moves it, and a third browser arriving later finds it where it was moved to.
-// Screenshots land in Screenshots/web_*.png.
+// editor and sticks it on a noticeboard, and the other sees it and moves it; she posts a question in the question box,
+// and he pulls it out and lays it on the table; and a third browser arriving later finds the note where it was moved
+// to and the question on the table. Screenshots land in Screenshots/web_*.png.
 //
 //   cd Tools/web && npm install && npm run e2e            (needs a web build in Builds/WebGL and Google Chrome)
 //   npm run e2e -- --headed                                (watch it happen)
@@ -78,8 +78,9 @@ async function open(name) {
   return {name, page}
 }
 
-// The note saying `text` on the first board, as the game in `page` has it.
+// The note saying `text` on the first board (or the question in the box or on the table), as the game in `page` has it.
 const noteOnBoard = (page, text) => page.evaluate(t => (window.facecast.debug.notes()?.boards[0].notes || []).find(n => n.text === t) || null, text)
+const questionIn = (page, where, text) => page.evaluate(([w, t]) => (window.facecast.debug.notes()?.[w] || []).find(n => n.text === t) || null, [where, text])
 const near = (n, x, y) => n && Math.abs(n.x - x) < 0.02 && Math.abs(n.y - y) < 0.02
 const fmt = c => c ? `x ${c.x.toFixed(2)} y ${c.y.toFixed(2)} w ${c.w.toFixed(2)} h ${c.h.toFixed(2)}` : 'none'
 // Ana's face zoom, once it has settled on a face; Ben's copy of her crop.
@@ -209,12 +210,45 @@ try {
   await sleep(1500)
   await b.page.screenshot({path: path.join(shots, 'web_board.png')})
 
+  // The question box: Ana writes a question on a card from the box's tray (the page's editor, as a card: no colours to
+  // pick) and posts it; Ben pulls it out and lays it on the table; Ana sees it there.
+  log('questions: Ana posts a question…')
+  await a.page.evaluate(() => { window.facecast.debug.unity('note goto box'); window.facecast.debug.unity('note ask') })
+  await until('the question card to open', () => a.page.evaluate(() => window.facecast.debug.asking()), 10)
+  if (!(await a.page.evaluate(() => document.getElementById('noteColors').hidden))) failures.push('the question card offers colours')
+  await a.page.keyboard.type("What's for lunch?")
+  await sleep(400)  // the card fades in
+  await a.page.screenshot({path: path.join(shots, 'web_question_editor.png')})
+  await a.page.keyboard.press('ControlOrMeta+Enter')
+  await until('Ana to hold her question', () => a.page.evaluate(() => window.facecast.debug.notes()?.held), 10)
+  await a.page.evaluate(() => window.facecast.debug.unity('note post'))
+  const posted = await until("the question in Ana's box", () => questionIn(a.page, 'box', "What's for lunch?"), 10)
+  if (!posted.question || posted.by) failures.push(`Ana's question came out wrong: ${JSON.stringify(posted)}`)
+  await a.page.evaluate(() => window.facecast.debug.unity('teleport 0 -6 0 4'))
+  await until("the question in Ben's box", () => questionIn(b.page, 'box', "What's for lunch?"), 20)
+  await sleep(1000)
+  await b.page.evaluate(() => {
+    const unity = window.facecast.debug.unity
+    unity('note goto box')
+    unity('note pull')
+  })
+  const pulled = await until('Ben to pull it out', () => b.page.evaluate(() => window.facecast.debug.notes()?.held), 10)
+  if (pulled !== posted.id) failures.push(`Ben pulled ${pulled}, not Ana's question ${posted.id}`)
+  await b.page.evaluate(() => window.facecast.debug.unity('note lay 0.62 0.5'))
+  await until('Ana to see it on the table', () => questionIn(a.page, 'table', "What's for lunch?"), 20)
+  if (await questionIn(a.page, 'box', "What's for lunch?")) failures.push("Ana's box still has the question")
+  log('Ben pulled out the question and laid it on the table; Ana sees it there')
+  await b.page.evaluate(() => window.facecast.debug.unity('note goto table'))
+  await sleep(1500)
+  await b.page.screenshot({path: path.join(shots, 'web_table.png')})
+
   // Someone arriving later gets the boards from the people already here.
   const c = await open('Cy')
   await c.page.goto(`${base}?autojoin&name=Cy&cam=0&mic=0#${room}`)
   await until('Cy to join', () => c.page.evaluate(() => window.facecast?.debug.joined()), 120)
   await until('Cy to get the note, where Ben moved it', async () => near(await noteOnBoard(c.page, 'Hello from Ana'), 0.7, 0.4), 60)
-  log('Cy, arriving later, finds the note where Ben moved it')
+  await until('Cy to find the question on the table', () => questionIn(c.page, 'table', "What's for lunch?"), 10)
+  log('Cy, arriving later, finds the note where Ben moved it and the question on the table')
 } catch (e) {
   failures.push(e.message)
 } finally {

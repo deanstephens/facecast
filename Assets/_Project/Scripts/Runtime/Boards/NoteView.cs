@@ -4,14 +4,17 @@ using UnityEngine.Rendering;
 namespace Facecast
 {
     /// <summary>
-    /// A sticky note you can see: the StickyNote model's paper in the note's colour, and its handwriting (an "Ink"
-    /// child the prefab builder adds, facing the reader). The same view shows a note on a board, in your hand or in
-    /// someone else's. It rebuilds the handwriting only when the words change.
+    /// A sticky note or question card you can see: the StickyNote model's paper in the note's colour (or the
+    /// QuestionCard model's, which is always cream), and its handwriting (an "Ink" child the prefab builder adds,
+    /// facing the reader). The same view shows it on a board or the table, in your hand or in someone else's. It
+    /// rebuilds the handwriting only when the words change.
     /// </summary>
     public sealed class NoteView : MonoBehaviour
     {
         public MeshRenderer Paper;
         public MeshFilter Ink;
+        /// <summary>A question card (anonymous, cream, written below its rule) rather than a sticky note.</summary>
+        public bool Card;
 
         Mesh _mesh;
         string _text, _by;
@@ -25,7 +28,7 @@ namespace Facecast
         {
             var boards = Noticeboards.Instance;
             if (!boards) return;
-            if (color != _color)
+            if (color != _color && !Card)
             {
                 _color = color;
                 Paper.sharedMaterial = boards.PaperMaterial(color);
@@ -40,7 +43,7 @@ namespace Facecast
                 Ink.sharedMesh = _mesh;
                 Ink.GetComponent<MeshRenderer>().sharedMaterial = boards.InkMaterialInstance;
             }
-            NoteInk.BuildNote(_mesh, boards.NoteFont, text ?? "", by ?? "");
+            NoteInk.BuildNote(_mesh, boards.NoteFont, text ?? "", by ?? "", Card ? NoteInk.Card : NoteInk.Sticky);
             boards.SyncInkAtlas();
         }
 

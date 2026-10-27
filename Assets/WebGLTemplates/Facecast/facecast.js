@@ -53,7 +53,8 @@ const unityQueue = []
 const uploads = {}
 let audioCtx = null
 let selfAnalyser = null
-let writing = false                 // the note to write on is open
+let writing = false                 // the note (or question card) to write on is open
+let asking = false                  // it's a question card
 let noteColor = 0
 let notesReport = null              // what the game says is on the boards (for the tests)
 let notesReceived = 0
@@ -98,7 +99,7 @@ window.facecast = {
     if (!target) actions.notes.send(data).catch(() => {})
     else if (peers.has(target)) actions.notes.send(data, {target}).catch(() => {})  // demo bots aren't peers
   },
-  openNoteEditor(text, color) { openNoteEditor(text, color) },
+  openNoteEditor(text, color, question) { openNoteEditor(text, color, question) },
   closeNoteEditor() { closeNoteEditor() },
   reportNotes(json) { try { notesReport = JSON.parse(json) } catch {} },
   // For the console and the end-to-end test (Tools/web/e2e.mjs).
@@ -119,6 +120,7 @@ window.facecast = {
     notes: () => notesReport,
     notesReceived: () => notesReceived,
     writing: () => writing,
+    asking: () => writing && asking,
     unity: command => unity && unity.SendMessage('Room', 'OnDebugCommand', command),
   },
 }
@@ -562,9 +564,9 @@ function cleanNote(n) {
   const num = (v, d = 0) => typeof v === 'number' && isFinite(v) ? v : d
   const str = (v, max) => typeof v === 'string' ? v.slice(0, max) : ''
   return {
-    id: n.id.slice(0, 64), board: num(n.board, -1) | 0, x: num(n.x, 0.5), y: num(n.y, 0.5), tilt: num(n.tilt),
-    color: num(n.color) | 0, text: str(n.text, 400), by: str(n.by, 48), holder: str(n.holder, 64), gone: n.gone === true,
-    v: num(n.v) | 0, w: str(n.w, 64),
+    id: n.id.slice(0, 64), board: num(n.board, -1) | 0, question: n.question === true, x: num(n.x, 0.5),
+    y: num(n.y, 0.5), tilt: num(n.tilt), color: num(n.color) | 0, text: str(n.text, 400), by: str(n.by, 48),
+    holder: str(n.holder, 64), gone: n.gone === true, v: num(n.v) | 0, w: str(n.w, 64),
   }
 }
 
@@ -593,8 +595,9 @@ function setupNoteEditor() {
   })
   $('noteCancel').onclick = () => finishNote(false)
   $('noteDone').onclick = () => finishNote(true)
-  if (/Mac|iPhone|iPad/.test(navigator.platform)) $('noteTip').textContent = '⌘ Enter: done · Esc: cancel · then click a board to stick it'
 }
+
+const MAC = /Mac|iPhone|iPad/.test(navigator.platform)
 
 function pickNoteColor(i) {
   noteColor = Math.max(0, Math.min(NOTE_COLORS.length - 1, i | 0))
@@ -606,11 +609,20 @@ function countNote() {
   $('noteCount').textContent = `${$('noteText').value.length} / ${NOTE_MAX}`
 }
 
-function openNoteEditor(text, color) {
+// A sticky note of `color` to write on, or a question card (cream, ruled, no colour to choose: questions are anonymous).
+function openNoteEditor(text, color, question = false) {
   writing = true
+  asking = !!question
   if (document.pointerLockElement) document.exitPointerLock()
   $('noteText').value = text || ''
-  pickNoteColor(color)
+  $('noteEditor').classList.toggle('asking', asking)
+  $('noteColors').hidden = asking
+  $('noteText').placeholder = asking ? 'Ask a question…' : 'Write something…'
+  $('noteText').setAttribute('aria-label', asking ? 'Your question' : 'What the note says')
+  $('noteTip').textContent = `${MAC ? '⌘ Enter' : 'Ctrl+Enter'}: done · Esc: cancel · ` +
+    (asking ? 'then post it in the question box' : 'then click a board to stick it')
+  if (asking) $('notePaper').style.removeProperty('--note')
+  else pickNoteColor(color)
   countNote()
   $('noteEditor').hidden = false
   setTimeout(() => $('noteText').focus(), 0)

@@ -102,10 +102,12 @@
     </div>
     <div id="toasts" class="toasts" aria-live="polite"></div>
 
-    <!-- The note you write on: the game opens it when you take a note from a noticeboard's notepad (or press E). -->
+    <!-- The note you write on: the game opens it when you take a note from a noticeboard's notepad, or a question card
+         from the question box's tray (or press E to write on what you hold). -->
     <div id="noteEditor" class="note-editor" hidden>
       <div class="note-card" role="dialog" aria-label="Write a note">
         <div id="notePaper" class="note-paper">
+          <span class="note-rule" aria-hidden="true"></span>
           <textarea id="noteText" maxlength="140" placeholder="Write something…" aria-label="What the note says"></textarea>
           <span id="noteCount" class="note-count">0 / 140</span>
         </div>

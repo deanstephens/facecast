@@ -9,7 +9,8 @@ namespace Facecast
     /// <c>-autocapture &lt;dir&gt;</c>: it photographs the square from above, then poses three demo bots in front of
     /// you and saves your first-person view, a close-up of a face screen and a wider shot with their names (one of
     /// them carrying a note); then it writes a note at a noticeboard, holds it, holds it up to the board and sticks
-    /// it, and quits.
+    /// it; then it starts writing a question, pulls one out of the question box, reads it and lays it on the table;
+    /// and quits.
     /// </summary>
     public sealed class ScreenshotTour : MonoBehaviour
     {
@@ -108,6 +109,40 @@ namespace Facecast
                 var side = board.WorldPoint(new Vector2(-0.35f, 0.25f), 2.1f);
                 Look(cam, side, board.WorldPoint(new Vector2(0.55f, 0.45f)));
                 yield return Shot("board_wide");
+            }
+
+            // The question corner: pull a question out of the box, read it, lay it on the table.
+            if (boards && hand && boards.QuestionBox && boards.QuestionTable)
+            {
+                var box = boards.QuestionBox;
+                var table = boards.QuestionTable;
+                cam.transform.SetParent(player.transform, false);
+                cam.transform.localPosition = new Vector3(0f, LocalPlayer.EyeHeight, 0f);
+                var stand = table.ReadingPose(0.95f).Position;
+                player.Teleport(Facing(stand, box.transform.position + Vector3.up * 1f));
+                hand.Ask();
+                yield return null;
+                var overlay = Overlay.Instance;
+                if (overlay && overlay.NoteEditorOpen)
+                {
+                    overlay.NoteDraft = "Could we have a picnic here next Saturday?";
+                    yield return Shot("question_editor");
+                    overlay.FinishNote(false);
+                }
+                hand.AlwaysAim = true;
+                hand.Pull();
+                yield return null;
+                yield return Shot("question_in_hand");
+                var spot = new Vector2(0.64f, 0.5f);
+                player.Teleport(Facing(stand, table.WorldPoint(spot)));
+                yield return null;
+                hand.Put(Notes.Table, spot);
+                hand.AlwaysAim = false;
+                yield return null;
+                cam.transform.SetParent(null, true);
+                var corner = (box.transform.position + table.transform.position) * 0.5f;
+                Look(cam, corner + box.transform.forward * 2.4f + box.transform.right * 0.5f + Vector3.up * 1.9f, corner + Vector3.up * 0.75f);
+                yield return Shot("question_corner");
             }
 
             Debug.Log("[ScreenshotTour] Done");

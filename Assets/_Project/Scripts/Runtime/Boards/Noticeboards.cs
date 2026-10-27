@@ -6,19 +6,22 @@ using FontAsset = UnityEngine.TextCore.Text.FontAsset;
 namespace Facecast
 {
     /// <summary>
-    /// The room's four noticeboards and every note on them, kept in step between browsers. Your changes
-    /// (<see cref="Commit"/>) go to everyone as a "notes" message; theirs come back through <see cref="Receive"/>,
-    /// and the newest version of each note wins (<see cref="NoteBook"/>). Someone arriving gets all the notes from
-    /// everyone already here, so the boards last as long as anyone is in the room; your browser also keeps the room's
-    /// notes, so a room you come back to has them even if you're first in. A note someone is carrying shows in
-    /// their hand, and goes back on its board if they leave with it.
+    /// The room's four noticeboards and its question corner (the box and the table), and every note and question
+    /// card on them, kept in step between browsers. Your changes (<see cref="Commit"/>) go to everyone as a "notes"
+    /// message; theirs come back through <see cref="Receive"/>, and the newest version of each note wins
+    /// (<see cref="NoteBook"/>). Someone arriving gets all the notes from everyone already here, so the boards last as
+    /// long as anyone is in the room; your browser also keeps the room's notes, so a room you come back to has them
+    /// even if you're first in. A note or card someone is carrying shows in their hand, and goes back where it was if
+    /// they leave with it.
     /// </summary>
     public sealed class Noticeboards : MonoBehaviour
     {
         public static Noticeboards Instance { get; private set; }
 
         public Noticeboard[] Boards;
-        public GameObject NotePrefab;
+        public QuestionBox QuestionBox;
+        public QuestionTable QuestionTable;
+        public GameObject NotePrefab, CardPrefab;
         /// <summary>The handwriting (a dynamic signed-distance-field font asset).</summary>
         public FontAsset NoteFont;
         public Material InkMaterial;
@@ -32,7 +35,7 @@ namespace Facecast
         const float SaveDelay = 1.5f;
 
         Material[] _paper;
-        readonly Stack<NoteView> _pool = new();
+        readonly Stack<NoteView> _notePool = new(), _cardPool = new();
         readonly Dictionary<string, NoteView> _carried = new();
         readonly List<string> _drop = new();
         readonly List<NoteData> _scratch = new();
@@ -57,6 +60,7 @@ namespace Facecast
             InkMaterialInstance = InkMaterial ? new Material(InkMaterial) { name = "Ink (instance)" } : null;
             SyncInkAtlas();
             for (int i = 0; i < Boards.Length; i++) Boards[i].Index = i;
+            if (QuestionTable) QuestionTable.Index = Notes.Table;
             _spare = new GameObject("Spare notes").transform;
             _spare.SetParent(transform, false);
             _spare.gameObject.SetActive(false);
@@ -83,6 +87,30 @@ namespace Facecast
         }
 
         public Noticeboard Board(int index) => index >= 0 && index < Boards.Length ? Boards[index] : null;
+
+        /// <summary>The board or table that's place <paramref name="place"/>, or null (the box, a hand).</summary>
+        public NoteSurface Surface(int place) => place == Notes.Table ? QuestionTable : Board(place);
+
+        /// <summary>
+        /// A line of writing across a plate (a board's title, the question box's label): a new child of
+        /// <paramref name="plate"/> called <paramref name="name"/>, <paramref name="y"/> metres above its middle, facing out
+        /// of its front. Returns the mesh, to rewrite with <see cref="NoteInk.BuildLabel"/> or destroy.
+        /// </summary>
+        public Mesh Inscribe(Transform plate, string name, string text, float size, float maxWidth, float y = 0f)
+        {
+            var go = new GameObject(name, typeof(MeshFilter), typeof(MeshRenderer));
+            go.transform.SetParent(plate, false);
+            // The ink plane faces the reader: its +X is their right, its +Z points into the plate.
+            go.transform.SetLocalPositionAndRotation(new Vector3(0f, y, 0.0006f), Quaternion.Euler(0f, 180f, 0f));
+            var mesh = new Mesh { name = name };
+            NoteInk.BuildLabel(mesh, NoteFont, text, size, maxWidth, NoteInk.Ink);
+            SyncInkAtlas();
+            go.GetComponent<MeshFilter>().sharedMesh = mesh;
+            var r = go.GetComponent<MeshRenderer>();
+            r.sharedMaterial = InkMaterialInstance;
+            r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            return mesh;
+        }
 
         // ------------------------------------------------------------------ the room
 
@@ -150,25 +178,38 @@ namespace Facecast
         /// <summary>Stuck on its board, for everyone to see.</summary>
         public bool OnBoard(NoteData n) => !n.gone && n.board >= 0 && !Carried(n);
 
-        /// <summary>The notes on <paramref name="board"/>, bottom to top (the most recently stuck on top).</summary>
+        /// <summary>
+        /// What's in place <paramref name="board"/> (a board, the box or the table) for everyone to see, in the order
+        /// it got there: bottom to top on a board or the table, oldest first in the box.
+        /// </summary>
         public List<NoteData> NotesOn(int board, List<NoteData> into = null)
         {
             into ??= new List<NoteData>();
             into.Clear();
             foreach (var n in Book.All)
                 if (n.board == board && OnBoard(n)) into.Add(n);
-            into.Sort((a, b) => a.v != b.v ? a.v.CompareTo(b.v) : string.CompareOrdinal(a.w, b.w));
+            into.Sort((a, b) => a.v != b.v ? a.v.CompareTo(b.v)
+                : a.w != b.w ? string.CompareOrdinal(a.w, b.w) : string.CompareOrdinal(a.id, b.id));
             return into;
         }
 
-        /// <summary>A board's full when it has <see cref="Notes.MaxPerBoard"/> notes (counting ones being carried around).</summary>
-        public bool Full(int board, string except = null) => Book.CountOn(board, except) >= Notes.MaxPerBoard;
+        /// <summary>A board, the box or the table is full at <see cref="Notes.Capacity"/> (counting what's being carried around).</summary>
+        public bool Full(int place, string except = null) => Book.CountOn(place, except) >= Notes.Capacity(place);
+
+        /// <summary>The question that's been in the box longest, or null if it's empty.</summary>
+        public NoteData NextQuestion()
+        {
+            var inBox = NotesOn(Notes.Box, _scratch);
+            return inBox.Count > 0 ? inBox[0] : null;
+        }
 
         // ------------------------------------------------------------------ views
 
-        public NoteView MakeView(Transform parent)
+        /// <summary>A view of a sticky note, or of a question card, under <paramref name="parent"/>.</summary>
+        public NoteView MakeView(Transform parent, bool question = false)
         {
-            var view = _pool.Count > 0 ? _pool.Pop() : Instantiate(NotePrefab).GetComponent<NoteView>();
+            var pool = question ? _cardPool : _notePool;
+            var view = pool.Count > 0 ? pool.Pop() : Instantiate(question ? CardPrefab : NotePrefab).GetComponent<NoteView>();
             view.transform.SetParent(parent, false);
             view.transform.localScale = Vector3.one;
             return view;
@@ -178,7 +219,7 @@ namespace Facecast
         {
             if (!view) return;
             view.transform.SetParent(_spare, false);
-            _pool.Push(view);
+            (view.Card ? _cardPool : _notePool).Push(view);
         }
 
         void LateUpdate()
@@ -197,6 +238,8 @@ namespace Facecast
         {
             _dirty = false;
             foreach (var board in Boards) board.Show(NotesOn(board.Index, _scratch), this);
+            if (QuestionTable) QuestionTable.Show(NotesOn(Notes.Table, _scratch), this);
+            if (QuestionBox) QuestionBox.ShowCount(NotesOn(Notes.Box, _scratch).Count);
 
             // Notes in other people's hands, held up in front of them.
             _drop.Clear();
@@ -211,9 +254,9 @@ namespace Facecast
                 if (!_carried.TryGetValue(n.id, out var view) || view.transform.parent != avatar.Rig.HandR)
                 {
                     if (view) Recycle(view);
-                    view = MakeView(avatar.Rig.HandR);
+                    view = MakeView(avatar.Rig.HandR, n.question);
                     view.NoteId = n.id;
-                    view.name = "Carried note " + n.id;
+                    view.name = (n.question ? "Carried question " : "Carried note ") + n.id;
                     view.SetShadows(true);
                     view.transform.SetLocalPositionAndRotation(new Vector3(-0.02f, 0.11f, 0.07f), Quaternion.Euler(-12f, 0f, 4f));
                     view.transform.localScale = Vector3.one * 0.85f;
@@ -281,13 +324,23 @@ namespace Facecast
         class Summary
         {
             public BoardSummary[] boards;
+            public NoteData[] box, table;
             public string held;
         }
 
-        /// <summary>What's on each board and what you're holding, as JSON (the page keeps it for facecast.debug.notes()).</summary>
+        /// <summary>
+        /// What's on each board, in the box (oldest first) and on the table, and what you're holding, as JSON (the page
+        /// keeps it for facecast.debug.notes()).
+        /// </summary>
         public string Summarize()
         {
-            var s = new Summary { boards = new BoardSummary[Boards.Length], held = NoteHand.Instance ? NoteHand.Instance.HeldId ?? "" : "" };
+            var s = new Summary
+            {
+                boards = new BoardSummary[Boards.Length],
+                box = NotesOn(Notes.Box).ToArray(),
+                table = NotesOn(Notes.Table).ToArray(),
+                held = NoteHand.Instance ? NoteHand.Instance.HeldId ?? "" : "",
+            };
             for (int i = 0; i < Boards.Length; i++) s.boards[i] = new BoardSummary { notes = NotesOn(i).ToArray() };
             return JsonUtility.ToJson(s);
         }

@@ -5,16 +5,31 @@ using UnityEngine;
 
 namespace Facecast
 {
-    /// <summary>Sticky note constants: the colours (the notepads on every board, in order), sizes and limits.</summary>
+    /// <summary>
+    /// Sticky note and question card constants: where they can be (<see cref="NoteData.board"/>), the colours (the
+    /// notepads on every board, in order), sizes and limits.
+    /// </summary>
     public static class Notes
     {
-        public const int BoardCount = 4;
+        /// <summary>Places: the four noticeboards are 0..3, then the question box and the table beside it.</summary>
+        public const int BoardCount = 4, Box = 4, Table = 5, PlaceCount = 6;
         public const int MaxText = 140;
         public const int MaxLines = 8;
-        public const int MaxPerBoard = 40;
-        /// <summary>A note's side in metres (Blender/MODELS.md, StickyNote).</summary>
+        public const int MaxPerBoard = 40, MaxInBox = 60, MaxOnTable = 30;
+        /// <summary>A sticky note's side in metres (Blender/MODELS.md, StickyNote).</summary>
         public const float Size = 0.2f;
+        /// <summary>A question card, 0.2 × 0.14 m (Blender/MODELS.md, QuestionCard).</summary>
+        public static readonly Vector2 CardSize = new(0.2f, 0.14f);
         public const float MaxTilt = 8f;
+
+        /// <summary>Half a note's (or card's) width and height, in metres.</summary>
+        public static Vector2 HalfSize(bool question) => question ? CardSize * 0.5f : new Vector2(Size, Size) * 0.5f;
+
+        public static int Capacity(int place) => place == Box ? MaxInBox : place == Table ? MaxOnTable : MaxPerBoard;
+
+        /// <summary>Sticky notes go on the boards; question cards in the box or on the table.</summary>
+        public static bool Fits(bool question, int place) =>
+            question ? place == Box || place == Table : place >= 0 && place < BoardCount;
 
         /// <summary>Yellow, pink, blue and green: the notepads from left to right (Blender's NoteYellow, NotePink, …).</summary>
         public static readonly Color[] Colors = { Palette.Hex("#FFE27A"), Palette.Hex("#FFA9C6"), Palette.Hex("#9DD7FF"), Palette.Hex("#B6EA98") };
@@ -57,8 +72,8 @@ namespace Facecast
     }
 
     /// <summary>
-    /// One sticky note, as it travels between browsers and is saved: where it's stuck, what it says, who's carrying
-    /// it. Every change gets a new version (<see cref="v"/>, a Lamport clock, with the changer's id <see cref="w"/>
+    /// One sticky note or question card, as it travels between browsers and is saved: where it is, what it says,
+    /// who's carrying it. Every change gets a new version (<see cref="v"/>, a Lamport clock, with the changer's id <see cref="w"/>
     /// breaking ties) and the newest version of each note wins everywhere, so everyone's boards agree without a
     /// server, however the messages cross.
     /// </summary>
@@ -66,11 +81,19 @@ namespace Facecast
     public class NoteData
     {
         public string id;
-        /// <summary>The board it's stuck on (0..3), or -1 while it's in someone's hand and has never been stuck.</summary>
+        /// <summary>
+        /// Where it is: a board (0..3), the question box (<see cref="Notes.Box"/>) or the table (<see cref="Notes.Table"/>);
+        /// or -1 while it's in someone's hand and has never been put anywhere.
+        /// </summary>
         public int board = -1;
-        /// <summary>Its centre on the board, 0..1: across from the reader's left, and up from the bottom.</summary>
+        /// <summary>A question card rather than a sticky note.</summary>
+        public bool question;
+        /// <summary>Its centre on its board or the table, 0..1 across and up (see <see cref="NoteSurface"/>).</summary>
         public float x = 0.5f, y = 0.5f;
-        /// <summary>Degrees it leans, about the board's normal.</summary>
+        /// <summary>
+        /// Degrees it's turned about the surface's normal: a slight lean on a board; on the table, which way it faces
+        /// (towards whoever put it down).
+        /// </summary>
         public float tilt;
         public int color;
         public string text = "";
@@ -100,10 +123,11 @@ namespace Facecast
         public bool Sanitize()
         {
             if (string.IsNullOrEmpty(id) || id.Length > 64) return false;
-            if (board < -1 || board >= Notes.BoardCount) return false;
+            if (board < -1 || board >= Notes.PlaceCount) return false;
             x = float.IsFinite(x) ? Mathf.Clamp01(x) : 0.5f;
             y = float.IsFinite(y) ? Mathf.Clamp01(y) : 0.5f;
-            tilt = float.IsFinite(tilt) ? Mathf.Clamp(tilt, -Notes.MaxTilt, Notes.MaxTilt) : 0f;
+            if (!float.IsFinite(tilt)) tilt = 0f;
+            tilt = board == Notes.Table ? Mathf.DeltaAngle(0f, tilt) : Mathf.Clamp(tilt, -Notes.MaxTilt, Notes.MaxTilt);
             color = Mathf.Clamp(color, 0, Notes.Colors.Length - 1);
             text = Notes.CleanText(text);
             by = Notes.Clip(by?.Trim(), 24);
@@ -122,7 +146,8 @@ namespace Facecast
     }
 
     /// <summary>
-    /// Every note this browser knows about, on all four boards: the shared state of the room. Changes made here are
+    /// Every note and question this browser knows about, on the boards, in the box and on the table: the shared state
+    /// of the room. Changes made here are
     /// <see cref="Commit"/>ted with a new version and sent to everyone; notes from others are <see cref="Merge"/>d
     /// in when they're newer than ours.
     /// </summary>
@@ -167,7 +192,7 @@ namespace Facecast
             return note;
         }
 
-        /// <summary>Live notes stuck on <paramref name="board"/> (whoever is carrying them).</summary>
+        /// <summary>Live notes in place <paramref name="board"/> (a board, the box or the table), counting ones being carried around.</summary>
         public int CountOn(int board, string except = null)
         {
             int n = 0;

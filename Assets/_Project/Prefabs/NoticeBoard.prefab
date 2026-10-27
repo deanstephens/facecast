@@ -847,6 +847,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Facecast.Runtime::Facecast.Noticeboard
   Index: 0
+  Size: {x: 2.1, y: 1.25}
   Title: Notices
   Accent: {r: 1, g: 1, b: 1, a: 1}
   Cork: {fileID: 1483568436988057150}
@@ -858,4 +859,3 @@ MonoBehaviour:
   - {fileID: 7619751211522241644}
   - {fileID: 156120944790292528}
   FrameRenderer: {fileID: 6400623204092774179}
-  Size: {x: 2.1, y: 1.25}

@@ -73,3 +73,24 @@ them and stick them anywhere on its cork. Unity (`Noticeboard`, `NoteView`) find
 | `Paper` | (0, 0, 0) | The paper, all `Tint` (Unity multiplies by the note's colour). The bottom 3 cm curls up to 7 mm off the board at one corner, so Unity writes only on the flat part above it. |
 
 Board budget ≈ 2100 tris; a note 156.
+
+## The question corner (`models_questions.py`)
+
+A box people post written questions into, with a tray of blank question cards on its side, and a table beside it
+where questions are laid once they've been pulled out and read. Unity (`QuestionBox`, `QuestionTable`, `NoteView`)
+finds these parts by name.
+
+| Model / child | Pivot | What Unity does with it |
+|---|---|---|
+| `QuestionBox` | ground, (0, 0, 0) | 1.12 m tall; faces -Y. |
+| `Stand` | (0, 0, 0) | Stone base and post. Mesh collider. |
+| `Box` | (0, 0, 0) | The box (0.52 × 0.4 × 0.36 m, from 0.72 m up), its lid with the slot (lid and rim `Tint`: the corner's colour), and the tray hanging on its left as you face it. Mesh collider (not a box: the tray of cards lies inside its bounds). Click it to post or pull out a question. |
+| `Label` | the plate's face, (0, -0.21, 0.9) | Cream label 0.42 × 0.2 m with a `Tint` border. Unity writes "Questions" and how many are inside. |
+| `Cards` | the top of the stack, (-0.36, 0, 1.052) | Blank cards lying in the tray, long side along Y. Box collider: click it to write a question. |
+| `QuestionTable` | ground, (0, 0, 0) | 1.5 × 0.85 m, 0.76 m tall; its long side along X, its front facing -Y. |
+| `Top` | the tabletop's centre, (0, 0, 0.76) | Box collider. Unity lays cards on it face up, each turned to read the right way up for whoever put it down. |
+| `Legs` | (0, 0, 0) | Legs and rails. Mesh collider. |
+| `QuestionCard` | the centre of its back, (0, 0, 0) | One index card: 0.2 × 0.14 m, 1.5 mm thick, its front at y = -0.0015. |
+| `Card` | (0, 0, 0) | Cream (`CardPaper`, not tinted), with a red rule 4.6 cm above the middle; Unity writes below it. |
+
+Box ≈ 650 tris, table 440, a card 24.

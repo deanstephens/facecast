@@ -6,18 +6,20 @@ using UnityEngine.InputSystem;
 namespace Facecast
 {
     /// <summary>
-    /// Your hand, for sticky notes. Look at a noticeboard's notepad and click to take a note: a note to write on opens
-    /// (the page's in a browser, the overlay's elsewhere). Done, it's in your hand; look at any board and click to stick
-    /// it where you're pointing. Click a note on a board to pick it up and move it; while you hold one, E writes on
-    /// it again and X throws it away. Within <see cref="Reach"/> only.
+    /// Your hand, for sticky notes and question cards. Look at a noticeboard's notepad and click to take a note: a
+    /// note to write on opens (the page's in a browser, the overlay's elsewhere). Done, it's in your hand; look at any
+    /// board and click to stick it where you're pointing. Click a note on a board to pick it up and move it.
+    /// At the question corner, click the tray on the box's side to write a question, and the box to post it; with
+    /// empty hands, click the box to pull out the question that's waited longest, and the table to lay it down once
+    /// it's read. While you hold anything, E writes on it again and X throws it away. Within <see cref="Reach"/> only.
     /// </summary>
     [RequireComponent(typeof(LocalPlayer))]
     public sealed class NoteHand : MonoBehaviour
     {
         public const float Reach = 3.2f;
-        /// <summary>Where the note in your hand sits in front of your eyes.</summary>
-        static readonly Vector3 HandPosition = new(0.2f, -0.17f, 0.46f);
-        static readonly Quaternion HandRotation = Quaternion.Euler(16f, 180f - 18f, -6f);
+        /// <summary>Where a sticky note sits in front of your eyes; a question card is held up nearer the middle, to read.</summary>
+        static readonly Vector3 NoteHandPosition = new(0.2f, -0.17f, 0.46f), CardHandPosition = new(0.11f, -0.12f, 0.4f);
+        static readonly Quaternion NoteHandRotation = Quaternion.Euler(16f, 180f - 18f, -6f), CardHandRotation = Quaternion.Euler(12f, 180f - 8f, -3f);
         const float HandScale = 0.8f;
 
         public static NoteHand Instance { get; private set; }
@@ -25,23 +27,35 @@ namespace Facecast
         /// <summary>What you're pointing at.</summary>
         public struct Target
         {
+            /// <summary>A board's cork or the table's top, under the crosshair.</summary>
+            public NoteSurface Surface;
+            /// <summary>The board you're pointing at (its cork or a notepad).</summary>
             public Noticeboard Board;
-            public int Pad;            // a notepad (colour index), or -1
-            public bool OnCork;
-            public Vector2 Point;      // on the cork (0..1)
-            public NoteData Note;      // the note there, if any
+            /// <summary>A notepad (colour index), or -1.</summary>
+            public int Pad;
+            /// <summary>The question box (its body or its tray of cards).</summary>
+            public QuestionBox Box;
+            public bool OnCards;
+            /// <summary>Where on the surface (0..1).</summary>
+            public Vector2 Point;
+            /// <summary>The note or card there, if any.</summary>
+            public NoteData Note;
+
+            public bool OnCork => Surface && Surface is Noticeboard;
+            public bool OnTable => Surface && Surface is QuestionTable;
+            public bool OnBox => Box && !OnCards;
         }
 
         LocalPlayer _player;
         InputAction _use, _write, _discard;
-        NoteView _view;
-        NoteData _draft;               // a fresh note being written: nobody else knows about it yet
-        readonly List<NoteData> _onBoard = new();
+        NoteView _noteView, _cardView;
+        NoteData _draft;               // a fresh note or question being written: nobody else knows about it yet
+        readonly List<NoteData> _onSurface = new();
         bool _wasLocked;
         string _lost;
         float _lostUntil;
 
-        /// <summary>The note you're carrying, or null.</summary>
+        /// <summary>The note or card you're carrying, or null.</summary>
         public string HeldId { get; private set; }
         /// <summary>A note to write on is open.</summary>
         public bool Writing { get; private set; }
@@ -50,7 +64,10 @@ namespace Facecast
         public bool AlwaysAim { get; set; }
         /// <summary>What a click would do now, for the overlay; null when there's nothing to say.</summary>
         public string Prompt { get; private set; }
-        public NoteView View => _view;
+        /// <summary>The view of what's in your hand.</summary>
+        public NoteView View => Held is { question: true } ? _cardView : _noteView;
+
+        NoteData Held => HeldId != null ? Boards.Book.Get(HeldId) : null;
 
         void Awake()
         {
@@ -97,7 +114,7 @@ namespace Facecast
             {
                 string who = held != null && Room.Instance && Room.Instance.Get(held.holder) is { } other ? other.DisplayName : "Someone";
                 LetGo();
-                Lose($"{who} took that note first");
+                Lose($"{who} took that {(held is { question: true } ? "question" : "note")} first");
             }
 
             bool locked = Cursor.lockState == CursorLockMode.Locked;
@@ -129,15 +146,23 @@ namespace Facecast
             if (!cam) return target;
             var ray = new Ray(cam.transform.position, cam.transform.forward);
             if (!Physics.Raycast(ray, out var hit, Reach, ~0, QueryTriggerInteraction.Ignore)) return target;
-            var board = hit.collider.GetComponentInParent<Noticeboard>();
-            if (!board) return target;
-            target.Board = board;
-            target.Pad = board.PadOf(hit.collider);
-            if (hit.collider == board.CorkCollider)
+            var c = hit.collider;
+            if (c.GetComponentInParent<Noticeboard>() is { } board)
             {
-                target.OnCork = true;
-                target.Point = board.BoardPoint(hit.point);
-                target.Note = board.NoteAt(target.Point, Boards.NotesOn(board.Index, _onBoard));
+                target.Board = board;
+                target.Pad = board.PadOf(c);
+                if (c == board.CorkCollider) target.Surface = board;
+            }
+            else if (c.GetComponentInParent<QuestionTable>() is { } table && c == table.TopCollider) target.Surface = table;
+            else if (c.GetComponentInParent<QuestionBox>() is { } box)
+            {
+                target.Box = box;
+                target.OnCards = c == box.Cards;
+            }
+            if (target.Surface)
+            {
+                target.Point = target.Surface.SurfacePoint(hit.point);
+                target.Note = target.Surface.NoteAt(target.Point, Boards.NotesOn(target.Surface.Index, _onSurface));
             }
             return target;
         }
@@ -147,12 +172,28 @@ namespace Facecast
             if (_lost != null && Time.unscaledTime < _lostUntil) return _lost;
             _lost = null;
             if (Writing) return null;
-            if (HeldId != null)
+            var held = Held;
+            var boards = Boards;
+            if (held is { question: true })
             {
-                if (t.OnCork) return Boards.Full(t.Board.Index, HeldId) ? "This board is full: take a note down first" : "Click to stick it here";
+                if (t.OnBox) return boards.Full(Notes.Box, held.id) ? "The box is full" : "Click to post it in the box";
+                if (t.OnTable) return boards.Full(Notes.Table, held.id) ? "The table is full: clear some cards away first" : "Click to lay it here";
+                if (t.OnCork) return "Question cards go in the box, or on the table once they're read";
+                return "Click the box to post it, or the table to lay it down   ·   E write on it   ·   X throw it away";
+            }
+            if (held != null)
+            {
+                if (t.OnCork) return boards.Full(t.Surface.Index, held.id) ? "This board is full: take a note down first" : "Click to stick it here";
+                if (t.OnTable || t.OnBox) return "Sticky notes go on the noticeboards";
                 return "Click a board to stick your note   ·   E write on it   ·   X throw it away";
             }
             if (t.Pad >= 0) return $"Click to take a {Notes.ColorNames[t.Pad]} note";
+            if (t.OnCards) return "Click to write a question";
+            if (t.OnBox)
+            {
+                int n = boards.NotesOn(Notes.Box, _onSurface).Count;
+                return n == 0 ? "The question box is empty" : $"Click to pull out a question ({QuestionBox.CountText(n)})";
+            }
             if (t.Note != null) return "Click to pick it up";
             return null;
         }
@@ -160,12 +201,14 @@ namespace Facecast
         void Use()
         {
             var t = Aim;
-            if (!t.Board) return;
             if (HeldId != null)
             {
-                if (t.OnCork) Stick(t.Board.Index, t.Point);
+                if (t.Surface) Put(t.Surface.Index, t.Point);
+                else if (t.OnBox) Post();
             }
             else if (t.Pad >= 0) Take(t.Pad);
+            else if (t.OnCards) Ask();
+            else if (t.OnBox) Pull();
             else if (t.Note != null) PickUp(t.Note.id);
         }
 
@@ -177,26 +220,35 @@ namespace Facecast
             if (HeldId != null || Writing) return;
             var book = Boards.Book;
             _draft = new NoteData { id = book.NewId(), board = -1, color = Mathf.Clamp(color, 0, Notes.Colors.Length - 1), by = SelfName(), holder = book.Self };
-            OpenEditor(_draft.text, _draft.color);
+            OpenEditor(_draft);
         }
 
-        /// <summary>Writes on the note you're holding again.</summary>
+        /// <summary>Takes a blank question card from the box's tray and opens it to write on. Questions are anonymous.</summary>
+        public void Ask()
+        {
+            if (HeldId != null || Writing) return;
+            var book = Boards.Book;
+            _draft = new NoteData { id = book.NewId(), board = -1, question = true, holder = book.Self };
+            OpenEditor(_draft);
+        }
+
+        /// <summary>Writes on what you're holding again.</summary>
         public void Write()
         {
-            var n = HeldId != null ? Boards.Book.Get(HeldId) : null;
+            var n = Held;
             if (n == null || Writing) return;
-            OpenEditor(n.text, n.color);
+            OpenEditor(n);
         }
 
-        void OpenEditor(string text, int color)
+        void OpenEditor(NoteData n)
         {
             Writing = true;
             _player.Typing = true;
             Cursor.lockState = CursorLockMode.None;
             Cursor.visible = true;
-            if (WebBridge.Available) WebBridge.OpenNoteEditor(text, color);
-            else if (Overlay.Instance) Overlay.Instance.OpenNoteEditor(text, color);
-            else OnWritten(true, text, color);  // nowhere to write: keep it as it is
+            if (WebBridge.Available) WebBridge.OpenNoteEditor(n.text, n.color, n.question);
+            else if (Overlay.Instance) Overlay.Instance.OpenNoteEditor(n.text, n.color, n.question);
+            else OnWritten(true, n.text, n.color);  // nowhere to write: keep it as it is
         }
 
         /// <summary>The note to write on closed: <paramref name="ok"/> with what's written on it, or cancelled.</summary>
@@ -213,39 +265,72 @@ namespace Facecast
                 _draft = null;
                 if (!ok) return;  // put back on the pad
                 draft.text = text;
-                draft.color = color;
+                if (!draft.question) draft.color = color;
                 HeldId = boards.Commit(draft).id;
                 return;
             }
-            var n = HeldId != null ? boards.Book.Get(HeldId) : null;
+            var n = Held;
             if (!ok || n == null) return;
             var changed = n.Clone();
             changed.text = text;
-            changed.color = color;
-            changed.by = SelfName();
+            if (!n.question)
+            {
+                changed.color = color;
+                changed.by = SelfName();
+            }
             boards.Commit(changed);
         }
 
         /// <summary>Sticks the note you're holding on board <paramref name="board"/> at <paramref name="point"/>.</summary>
-        public bool Stick(int board, Vector2 point)
+        public bool Stick(int board, Vector2 point) => Put(board, point);
+
+        /// <summary>
+        /// Puts what you're holding at <paramref name="point"/> on place <paramref name="place"/>: a sticky note on a
+        /// board, leaning a little; a question card on the table, turned to read the right way up from where you stand.
+        /// </summary>
+        public bool Put(int place, Vector2 point)
         {
             var boards = Boards;
-            var b = boards.Board(board);
-            var n = HeldId != null ? boards.Book.Get(HeldId) : null;
-            if (!b || n == null || boards.Full(board, n.id)) return false;
-            var p = b.Clamp(point);
+            var surface = boards.Surface(place);
+            var n = Held;
+            if (!surface || n == null || !Notes.Fits(n.question, place) || boards.Full(place, n.id)) return false;
+            var p = surface.Clamp(point, n.question);
             var changed = n.Clone();
-            changed.board = board;
+            changed.board = place;
             changed.x = p.x;
             changed.y = p.y;
-            changed.tilt = Random.Range(-5f, 5f);
+            changed.tilt = place == Notes.Table
+                ? surface.TiltFacing(_player.Cam ? _player.Cam.transform.forward : transform.forward) + Random.Range(-6f, 6f)
+                : Random.Range(-5f, 5f);
             changed.holder = "";
             boards.Commit(changed);
             HeldId = null;
             return true;
         }
 
-        /// <summary>Takes a note off its board into your hand.</summary>
+        /// <summary>Posts the question card you're holding into the box.</summary>
+        public bool Post()
+        {
+            var boards = Boards;
+            var n = Held;
+            if (n == null || !n.question || boards.Full(Notes.Box, n.id)) return false;
+            var changed = n.Clone();
+            changed.board = Notes.Box;
+            changed.holder = "";
+            boards.Commit(changed);
+            HeldId = null;
+            return true;
+        }
+
+        /// <summary>Pulls the question that's been in the box longest out into your hand.</summary>
+        public bool Pull()
+        {
+            if (HeldId != null || Writing) return false;
+            var next = Boards.NextQuestion();
+            return next != null && PickUp(next.id);
+        }
+
+        /// <summary>Takes a note off its board, or a card off the table or out of the box, into your hand.</summary>
         public bool PickUp(string id)
         {
             var boards = Boards;
@@ -257,11 +342,11 @@ namespace Facecast
             return true;
         }
 
-        /// <summary>Throws away the note you're holding.</summary>
+        /// <summary>Throws away what you're holding.</summary>
         public void Discard()
         {
             var boards = Boards;
-            var n = HeldId != null ? boards.Book.Get(HeldId) : null;
+            var n = Held;
             if (n == null || Writing) return;
             var changed = n.Clone();
             changed.gone = true;
@@ -282,39 +367,43 @@ namespace Facecast
 
         static string SelfName() => App.Instance ? App.Instance.SelfName : "";
 
-        // ------------------------------------------------------------------ the note in your hand
+        // ------------------------------------------------------------------ what's in your hand
 
         void ShowHeld()
         {
             var boards = Boards;
-            var n = HeldId != null ? boards.Book.Get(HeldId) : _draft;
-            if (n == null || !(_player.InputEnabled || AlwaysAim))
+            var n = Held ?? _draft;
+            bool show = n != null && (_player.InputEnabled || AlwaysAim);
+            if (_noteView) _noteView.gameObject.SetActive(show && !n.question);
+            if (_cardView) _cardView.gameObject.SetActive(show && n.question);
+            if (!show) return;
+
+            ref var view = ref n.question ? ref _cardView : ref _noteView;
+            if (!view)
             {
-                if (_view) _view.gameObject.SetActive(false);
-                return;
+                view = boards.MakeView(null, n.question);
+                view.name = n.question ? "Your question" : "Your note";
             }
-            if (!_view)
-            {
-                _view = boards.MakeView(null);
-                _view.name = "Your note";
-            }
-            _view.gameObject.SetActive(true);
-            _view.Show(n);
+            view.gameObject.SetActive(true);
+            view.Show(n);
             var t = Aim;
-            if (HeldId != null && t.OnCork && !boards.Full(t.Board.Index, HeldId))
+            if (HeldId != null && t.Surface && Notes.Fits(n.question, t.Surface.Index) && !boards.Full(t.Surface.Index, HeldId))
             {
-                // Held against the board where it would go.
-                _view.transform.SetParent(t.Board.transform, true);
-                _view.transform.SetPositionAndRotation(t.Board.WorldPoint(t.Board.Clamp(t.Point), Noticeboard.Lift + 0.012f), t.Board.NoteRotation(0f));
-                _view.transform.localScale = Vector3.one;
-                _view.SetShadows(true);
+                // Held against the board, or over the table, where it would go.
+                var s = t.Surface;
+                float tilt = s.Index == Notes.Table ? s.TiltFacing(_player.Cam.transform.forward) : 0f;
+                view.transform.SetParent(s.transform, true);
+                view.transform.SetPositionAndRotation(s.WorldPoint(s.Clamp(t.Point, n.question), NoteSurface.Lift + 0.012f), s.NoteRotation(tilt));
+                view.transform.localScale = Vector3.one;
+                view.SetShadows(true);
             }
             else
             {
-                _view.transform.SetParent(_player.Cam.transform, false);
-                _view.transform.SetLocalPositionAndRotation(HandPosition, HandRotation);
-                _view.transform.localScale = Vector3.one * HandScale;
-                _view.SetShadows(false);
+                view.transform.SetParent(_player.Cam.transform, false);
+                if (n.question) view.transform.SetLocalPositionAndRotation(CardHandPosition, CardHandRotation);
+                else view.transform.SetLocalPositionAndRotation(NoteHandPosition, NoteHandRotation);
+                view.transform.localScale = Vector3.one * HandScale;
+                view.SetShadows(false);
             }
         }
 
@@ -323,11 +412,14 @@ namespace Facecast
         /// <summary>
         /// The page's test hooks (<c>facecast.debug.unity("note …")</c>): <c>note take &lt;colour&gt;</c>,
         /// <c>note stick &lt;board&gt; &lt;x&gt; &lt;y&gt;</c>, <c>note pick &lt;id&gt;</c>, <c>note write</c>, <c>note drop</c>,
-        /// <c>note goto &lt;board&gt;</c> (stand in front of it).
+        /// <c>note ask</c>, <c>note post</c>, <c>note pull</c>, <c>note lay &lt;x&gt; &lt;y&gt;</c> (on the table),
+        /// <c>note goto &lt;board&gt;|box|table</c> (stand in front of it).
         /// </summary>
         public void DebugCommand(string[] w)
         {
             float F(int i) => i < w.Length && float.TryParse(w[i], NumberStyles.Float, CultureInfo.InvariantCulture, out float v) ? v : 0f;
+            string where = w.Length > 2 ? w[2] : "";
+            var boards = Boards;
             switch (w.Length > 1 ? w[1] : "")
             {
                 case "take": Take((int)F(2)); break;
@@ -335,7 +427,13 @@ namespace Facecast
                 case "pick" when w.Length > 2: PickUp(w[2]); break;
                 case "write": Write(); break;
                 case "drop": Discard(); break;
-                case "goto" when Boards.Board((int)F(2)) is { } b: _player.Teleport(b.ReadingPose()); break;
+                case "ask": Ask(); break;
+                case "post": Post(); break;
+                case "pull": Pull(); break;
+                case "lay": Put(Notes.Table, new Vector2(F(2), F(3))); break;
+                case "goto" when where == "box" && boards.QuestionBox: _player.Teleport(boards.QuestionBox.ReadingPose()); break;
+                case "goto" when where == "table" && boards.QuestionTable: _player.Teleport(boards.QuestionTable.ReadingPose()); break;
+                case "goto" when boards.Board((int)F(2)) is { } b: _player.Teleport(b.ReadingPose()); break;
                 default: Debug.LogWarning("[NoteHand] Unknown note command: " + string.Join(" ", w)); break;
             }
         }

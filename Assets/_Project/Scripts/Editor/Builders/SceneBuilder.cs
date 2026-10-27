@@ -11,9 +11,9 @@ namespace Facecast.EditorTools
 {
     /// <summary>
     /// Builds Plaza.unity, the only scene: the town square (fountain, ring of benches, lamps flanking the four paths,
-    /// four noticeboards between them with planters either side, a hedge ring with trees and hills beyond, an
-    /// invisible wall out on the lawn), a golden-hour sun and sky, and the systems: App, Room, the noticeboards, the
-    /// player and camera, and the overlay.
+    /// four noticeboards between them with planters either side, the question box and its table where one bench would
+    /// be, a hedge ring with trees and hills beyond, an invisible wall out on the lawn), a golden-hour sun and sky, and
+    /// the systems: App, Room, the noticeboards, the player and camera, and the overlay.
     /// </summary>
     public static class SceneBuilder
     {
@@ -21,8 +21,10 @@ namespace Facecast.EditorTools
         public const float BoundaryRadius = 30f;
         const float HedgeRadius = 15.8f;
         const float BoardRadius = 12.1f;
-        /// <summary>The boards' roofs and title frames: coral, sky, mint, violet.</summary>
-        static readonly Color[] BoardColors = { Palette.Colors[1], Palette.Colors[0], Palette.Colors[3], Palette.Colors[4] };
+        /// <summary>The boards' roofs and title frames: Continue mint, Stop coral, Invent violet, Act sky.</summary>
+        static readonly Color[] BoardColors = { Palette.Colors[3], Palette.Colors[1], Palette.Colors[4], Palette.Colors[0] };
+        /// <summary>The question corner: between the east path and the Continue board, in place of a bench.</summary>
+        const float CornerRadius = 9.8f, BoxAngle = 16.5f, TableAngle = 26f;
         static readonly float[] PathAngles = { 0f, 90f, 180f, 270f };
 
         [MenuItem("Facecast/Build/Build Everything", priority = 0)]
@@ -85,7 +87,7 @@ namespace Facecast.EditorTools
         public static void BuildScene()
         {
             var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
-            var boards = BuildWorld();
+            var (boards, questionBox, questionTable) = BuildWorld();
             BuildLighting();
 
             // Systems.
@@ -97,7 +99,10 @@ namespace Facecast.EditorTools
             app.Room.AvatarPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(Paths.AvatarPrefab);
             var notes = new GameObject("Noticeboards").AddComponent<Noticeboards>();
             notes.Boards = boards;
+            notes.QuestionBox = questionBox;
+            notes.QuestionTable = questionTable;
             notes.NotePrefab = Prefab("StickyNote");
+            notes.CardPrefab = Prefab("QuestionCard");
             notes.NoteFont = AssetDatabase.LoadAssetAtPath<UnityEngine.TextCore.Text.FontAsset>(Paths.NoteFontPath);
             notes.InkMaterial = FacecastAssets.Mat("M_Ink");
 
@@ -146,19 +151,25 @@ namespace Facecast.EditorTools
             Debug.Log("[SceneBuilder] Saved " + Paths.GameScene);
         }
 
-        static Noticeboard[] BuildWorld()
+        static (Noticeboard[], QuestionBox, QuestionTable) BuildWorld()
         {
             var world = new GameObject("World").transform;
             Place("PlazaGround", world, Vector3.zero, 0f);
             Place("Hills", world, Vector3.zero, 0f, 1f, false);
             Place("Fountain", world, Vector3.zero, 0f);
 
-            // Eight benches round the fountain, facing it, between the paths.
-            for (int i = 0; i < 8; i++)
+            // Benches round the fountain, facing it, between the paths; the first's place is the question corner's.
+            for (int i = 1; i < 8; i++)
             {
                 var p = Polar(9.4f, 22.5f + 45f * i);
                 Place("Bench", world, p, FacingCentre(p));
             }
+            var boxAt = Polar(CornerRadius, BoxAngle);
+            var questionBox = Place("QuestionBox", world, boxAt, FacingCentre(boxAt)).GetComponent<QuestionBox>();
+            questionBox.Accent = Palette.Colors[2];  // sunflower
+            PrefabUtility.RecordPrefabInstancePropertyModifications(questionBox);
+            var tableAt = Polar(CornerRadius, TableAngle);
+            var questionTable = Place("QuestionTable", world, tableAt, FacingCentre(tableAt)).GetComponent<QuestionTable>();
             // A lamp each side of every path where it leaves the square; planters between the paths.
             foreach (var a in PathAngles)
                 foreach (var side in new[] { -7.5f, 7.5f })
@@ -227,7 +238,7 @@ namespace Facecast.EditorTools
                 var box = seg.gameObject.AddComponent<BoxCollider>();
                 box.size = new Vector3(2f * Mathf.PI * BoundaryRadius / segments + 0.6f, 6f, 0.5f);
             }
-            return boards;
+            return (boards, questionBox, questionTable);
         }
 
         static void BuildLighting()

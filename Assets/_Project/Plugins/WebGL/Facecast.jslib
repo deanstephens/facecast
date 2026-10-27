@@ -108,13 +108,14 @@ mergeInto(LibraryManager.library, {
     return size;
   },
 
-  // Sticky notes: the game owns the boards; the page carries "notes" messages and shows the note you write on.
+  // Sticky notes and question cards: the game owns the boards, the box and the table; the page carries "notes"
+  // messages and shows the note or card you write on.
   FC_SendNotes: function (json, target) {
     if (window.facecast) window.facecast.sendNotes(UTF8ToString(json), UTF8ToString(target));
   },
 
-  FC_OpenNoteEditor: function (text, color) {
-    if (window.facecast) window.facecast.openNoteEditor(UTF8ToString(text), color);
+  FC_OpenNoteEditor: function (text, color, question) {
+    if (window.facecast) window.facecast.openNoteEditor(UTF8ToString(text), color, !!question);
   },
 
   FC_CloseNoteEditor: function () {
